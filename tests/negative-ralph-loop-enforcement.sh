@@ -5,7 +5,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/global/ralph-loop-enforce.sh"
 VALIDATOR="$ROOT/global/ralph-loop-validate.py"
 GUARD="$ROOT/global/guard-no-tracker-overwrite.sh"
+SECRET_GUARD="$ROOT/global/guard-no-secrets.sh"
 SAFETY_GUARD="$ROOT/global/guard-no-force-push.sh"
+SESSION_START="$ROOT/per-repo/ralph-loop/01-session-start-load-context.sh"
 HOOK03="$ROOT/per-repo/ralph-loop/03-plan-tracker-edit-guard.sh"
 MERGE_GATE="$ROOT/per-repo/ralph-loop/04-gh-pr-merge-gate.sh"
 PREF_HELPER="$ROOT/global/record-pre-fix-failing-test.sh"
@@ -56,6 +58,7 @@ write_attempt_evidence() {
   local file="$repo/.checkpoints/$task/attempt-$num.md"
   cat > "$file" <<EOF
 Command: attempt $num
+Command: pytest attempt $num
 Result: FAIL
 Commit: $sha
 repo docs tests git logs
@@ -64,7 +67,7 @@ EOF
 }
 
 write_handoff_attempts() {
-  local repo="$1" task="$2" count="$3" duplicate="${4:-no}" include_docs_search="${5:-yes}" include_consult="${6:-yes}"
+  local repo="$1" task="$2" count="$3" duplicate="${4:-no}" include_docs_search="${5:-yes}" include_consult="${6:-yes}" include_strategy="${7:-yes}"
   local sha
   sha="$(head_sha "$repo")"
   {
@@ -80,7 +83,7 @@ write_handoff_attempts() {
         hyp="hypothesis $i"
       fi
       decision="retry"
-      [ "$i" -ge 2 ] && decision="strategy_shift"
+      [ "$i" -ge 2 ] && [ "$include_strategy" = "yes" ] && decision="strategy_shift"
       extras="repo docs tests git logs"
       [ "$include_docs_search" = "yes" ] && extras="$extras official docs search Context7 internet"
       [ "$include_consult" = "yes" ] && extras="$extras Senior Engineer codex:rescue codex:codex-rescue"
@@ -183,6 +186,16 @@ test_duplicate_attempts() {
   printf '%s\n' "$old" > "$repo/WORKPLAN.md"
   write_handoff_attempts "$repo" TASK-001 2 yes yes yes
   expect_block "duplicate attempt hypothesis" invoke_write "$repo" "$repo/WORKPLAN.md" "$new"
+}
+
+test_failed_without_strategy_shift_or_consult() {
+  local repo old new
+  repo="$(make_repo)"
+  old="$(task_block " " in_progress pending docs)"
+  new="$(task_block " " failed "retry budget exhausted after docs work" docs)"
+  printf '%s\n' "$old" > "$repo/WORKPLAN.md"
+  write_handoff_attempts "$repo" TASK-001 2 no yes no no
+  expect_block "failed task without strategy shift or consultation" invoke_write "$repo" "$repo/WORKPLAN.md" "$new"
 }
 
 test_invalid_blocker_text() {
@@ -344,6 +357,41 @@ test_failed_verification_without_fresh_attempt() {
   expect_block "failed verification without fresh attempt" bash -c "printf '%s' '$payload' | python3 '$VALIDATOR' posttool-failure --project '$repo'"
 }
 
+test_failed_verification_duplicate_latest_hypothesis() {
+  local repo payload
+  repo="$(make_repo)"
+  printf '%s\n' "$(task_block " " in_progress pending code)" > "$repo/WORKPLAN.md"
+  write_handoff_attempts "$repo" TASK-001 2 yes yes yes
+  touch "$repo/WORKPLAN.md"
+  payload='{"tool_name":"Bash","tool_input":{"command":"pytest tests/test_app.py"},"tool_response":{"exit_code":1}}'
+  expect_block "failed verification duplicate latest hypothesis" bash -c "printf '%s' '$payload' | python3 '$VALIDATOR' posttool-failure --project '$repo'"
+}
+
+test_failed_verification_without_workplan_update() {
+  local repo payload
+  repo="$(make_repo)"
+  printf '%s\n' "$(task_block " " in_progress pending code)" > "$repo/WORKPLAN.md"
+  touch -t 202001010000 "$repo/WORKPLAN.md"
+  write_handoff_attempts "$repo" TASK-001 1 no yes yes
+  payload='{"tool_name":"Bash","tool_input":{"command":"pytest tests/test_app.py"},"tool_response":{"exit_code":1}}'
+  expect_block "failed verification without WORKPLAN update" bash -c "printf '%s' '$payload' | python3 '$VALIDATOR' posttool-failure --project '$repo'"
+}
+
+test_session_start_invalid_tracker_contract() {
+  local repo tracker
+  repo="$(make_repo)"
+  tracker="$repo/tracker.md"
+  printf '%s\n' '- [ ] free checkbox without metadata' > "$tracker"
+  printf '%s\n' "$tracker" > "$repo/.claude/active-tracker"
+  expect_block "session start invalid tracker contract" env RALPH_GLOBAL_HOOKS_DIR="$ROOT/global" bash -c "cd '$repo' && '$SESSION_START'"
+}
+
+test_secret_write_blocks() {
+  local payload
+  payload='{"tool_name":"Write","tool_input":{"file_path":"tmp.txt","content":"api_key = \"1234567890abcdef\""}}'
+  expect_block "secret write blocks" bash -c "printf '%s' '$payload' | bash '$SECRET_GUARD'"
+}
+
 test_destructive_rm_without_approval() {
   local repo payload
   repo="$(make_repo)"
@@ -396,6 +444,7 @@ test_prefix_helper_rejects_passing_test() {
 test_blocked_without_attempt
 test_failed_after_one_attempt
 test_duplicate_attempts
+test_failed_without_strategy_shift_or_consult
 test_invalid_blocker_text
 test_external_without_docs_search
 test_stuck_without_consult
@@ -412,6 +461,10 @@ test_touch_workplan_freshness_forgery
 test_source_edit_without_active_plan
 test_behavior_code_without_prefix_test
 test_failed_verification_without_fresh_attempt
+test_failed_verification_duplicate_latest_hypothesis
+test_failed_verification_without_workplan_update
+test_session_start_invalid_tracker_contract
+test_secret_write_blocks
 test_destructive_rm_without_approval
 test_pr_head_mismatch_blocks_merge
 test_prefix_helper_rejects_passing_test

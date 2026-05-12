@@ -870,6 +870,27 @@ def validate_recent_failed_attempt(project: Path, command: str) -> None:
     if command_token and command_token not in artifact:
         raise GateError(f"{task.task_id}: latest attempt does not reference failed command '{command_token}'")
 
+    latest_hypothesis = re.sub(r"\s+", " ", clean_value(latest.get("hypothesis", "")).lower())
+    previous_hypotheses = {
+        re.sub(r"\s+", " ", clean_value(item.get("hypothesis", "")).lower())
+        for item in attempts[:-1]
+    }
+    if latest_hypothesis in previous_hypotheses:
+        raise GateError(f"{task.task_id}: latest failed attempt repeats an earlier hypothesis")
+
+    latest_text = " ".join(latest.values()).lower()
+    if len(attempts) >= 2 and not re.search(
+        r"(strategy_shift|strategy shift|search_docs|consult_senior|consult_codex|codex:rescue)",
+        latest_text,
+    ):
+        raise GateError(f"{task.task_id}: repeated verification failure requires strategy shift")
+
+    workplan = project / "WORKPLAN.md"
+    if not workplan.exists():
+        raise GateError(f"{task.task_id}: verification failure requires WORKPLAN.md update")
+    if workplan.stat().st_mtime + 1 < evidence_path.stat().st_mtime:
+        raise GateError(f"{task.task_id}: WORKPLAN.md was not updated after latest failed attempt evidence")
+
 
 def handle_pretool(project: Path) -> None:
     raw = sys.stdin.read()

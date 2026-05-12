@@ -105,9 +105,12 @@ hooks и удалит дубли.
     с валидным `TASK-001` contract и `status: in_progress` - Stop должен exit 2.
 13. Если устанавливаешь из этого repo, запусти:
     `/Users/antonsahovskii/Dev/Hooks/tests/negative-ralph-loop-enforcement.sh`
+14. Если проект хранится на GitHub, добавь или адаптируй server CI по образцу
+    `/Users/antonsahovskii/Dev/Hooks/.github/workflows/ci.yml`, чтобы
+    negative enforcement tests гонялись не только локально.
 
 ЭТАП 6 - ОТЧЕТ
-14. Выведи структурированный отчет:
+15. Выведи структурированный отчет:
     - что было ДО (список существующих hooks + match с эталоном)
     - что стало ПОСЛЕ (новые/обновленные/удаленные с reasons)
     - smoke results (4 + опционально 1 stop test)
@@ -121,6 +124,7 @@ hooks и удалит дубли.
 - 0..6 optional guards подключены по применимости.
 - settings.json hooks block с правильными абсолютными путями.
 - Все smoke vectors blocked correctly, включая `ralph-loop-enforce` и Stop open-task gate.
+- Если есть GitHub repo, server CI гоняет syntax + negative enforcement tests.
 - Backup folder backups/<timestamp>/ содержит все что было удалено.
 - НЕТ модификации кода вне .claude/ + claude-home.
 

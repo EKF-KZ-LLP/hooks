@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  enforcement:
+    name: enforcement checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python compile
+        run: python3 -m py_compile global/ralph-loop-validate.py
+
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            bash -n "$file"
+          done < <(find global per-repo tests -name '*.sh' -type f | sort)
+
+      - name: Whitespace check
+        run: |
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^ HEAD
+          else
+            git diff --check
+          fi
+
+      - name: Forbidden symbol scan
+        run: |
+          if grep -R -n -P '[\x{0451}\x{2014}]' README.md SETUP-PROMPT.md WORKPLAN.md HANDOFF.md global per-repo templates tests .github; then
+            exit 1
+          fi
+
+      - name: Negative enforcement tests
+        run: tests/negative-ralph-loop-enforcement.sh

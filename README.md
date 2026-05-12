@@ -13,6 +13,7 @@
 /Users/antonsahovskii/Dev/Hooks/
 ├── README.md
 ├── SETUP-PROMPT.md                 ← скормить Claude Code в новом проекте
+├── .github/workflows/ci.yml         (server CI: syntax + negative enforcement tests)
 ├── global/                         ← в ~/.claude/hooks/ или alt-home
 │   ├── launcher.sh                 (диспетчер per-repo hooks)
 │   ├── guard-no-secrets.sh         (PreToolUse Write/Edit)
@@ -96,6 +97,18 @@
 | `13-pre-stop-deploy-green-gate.sh` | Stop\|SubagentStop | Opt-in deploy green gate. |
 | `14-pre-commit-evidence-gate.sh` | PreToolUse Bash | Блокирует `git commit`, если tracker evidence или WORKPLAN/HANDOFF stale. |
 | `15-post-verification-failure-gate.sh` | PostToolUse Bash | После failed tests/lint/typecheck/CI/review/Codex требует свежий attempt в `HANDOFF.md` с evidence. |
+
+## GitHub CI
+
+`.github/workflows/ci.yml` запускает те же enforcement checks на сервере:
+
+- Python compile для `global/ralph-loop-validate.py`.
+- Bash syntax для всех hook/test shell files.
+- `git diff --check`.
+- Scan на запрещенные символы.
+- `tests/negative-ralph-loop-enforcement.sh`.
+
+CodeQL может быть включен GitHub default setup. Merge hook не считает локальный лог достаточным: для PR merge он сверяет GitHub required checks, CodeQL status, reviewDecision и PR HEAD SHA.
 
 ## Task Evidence Contract
 

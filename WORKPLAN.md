@@ -5,7 +5,7 @@
 - Repository source: `/Users/antonsahovskii/Dev/Hooks`.
 - Project docs: `README.md`, `SETUP-PROMPT.md`, `templates/task-spec.md`, `global/*`, `per-repo/ralph-loop/*`.
 - No local `AGENTS.md` in this repository. Local git exists on branch `main`; remote `origin` points to `https://github.com/EKF-KZ-LLP/hooks.git`.
-- Remote GitHub repository is reachable, but it has no refs, PRs or workflow runs visible from this working copy during the repeat audit. Remote-only CI/CodeQL/review behavior is therefore tested by fail-closed mocks and left as a live-PR residual risk.
+- Remote GitHub repository is reachable at `https://github.com/EKF-KZ-LLP/hooks.git`; `main` is pushed. GitHub CodeQL default setup has a successful run on `64f15076f16883080ad7a386aa643fe7333da20f`. Third audit adds server CI for local enforcement tests.
 
 ## Readiness Criteria
 - All BLOCKING/HIGH gaps found in the 35 gates are fixed in hooks or tests.
@@ -100,6 +100,7 @@
 - Current local repository now has `.git`; `origin` was not configured at repeat-audit start.
 - Repeat audit must preserve existing uncommitted edits in `global/04-gh-pr-merge-gate.sh` and `per-repo/ralph-loop/04-gh-pr-merge-gate.sh` unless they are proven unsafe and replaced intentionally.
 - Repeat audit found HIGH gaps in post-failure hook coverage, HANDOFF attempt deletion, behavior-code pre-fix evidence production, PR HEAD review freshness, destructive local actions and tracker timestamp forgery. All were fixed locally and covered by negative tests.
+- Third audit found HIGH gaps in session-start contract validation, post-failure WORKPLAN freshness, repeat failed hypothesis detection before blocked/failed, and missing GitHub CI for negative tests. All were fixed locally before final remote verification.
 
 ## Repeat Audit Tasks
 
@@ -138,3 +139,41 @@
   - result: Added post-verification failure hook, pre-fix failing-test recorder, stricter PR evidence freshness, HANDOFF anti-deletion checks, destructive-action blocks and 8 new negative tests. Negative harness now reports 22 blocking tests.
   - commit: cfdcea4
   - status: done
+
+## Third Audit Tasks
+
+- [ ] TASK-010: Third hard audit after GitHub push
+  - type: discovery
+  - required: true
+  - scope: `global/`, `per-repo/ralph-loop/`, `tests/`, GitHub runs
+  - source_of_truth: user third-round request dated 2026-05-12 and current `origin/main`
+  - success_criteria: 35 gates rechecked with current local and GitHub evidence; gaps documented in required format
+  - verification: code audit, hook mapping, GitHub run inspection, negative tests
+  - evidence: `HANDOFF.md`, `gh run view 25717629767`, `tests/negative-ralph-loop-enforcement.sh`
+  - result: CodeQL success on GitHub was verified. Third-round local audit found four HIGH gaps: session start accepted invalid tracker contracts, failed verification did not require WORKPLAN freshness, repeated failed verification could reuse hypothesis until blocked/failed, and GitHub CI did not run negative tests.
+  - commit: pending-third-audit-commit
+  - status: done
+
+- [ ] TASK-011: Close third-round BLOCKING/HIGH gaps
+  - type: code
+  - required: true
+  - scope: hook code, docs, workflows, negative tests
+  - source_of_truth: gaps found in TASK-010
+  - success_criteria: each local fix has a hard block and a negative test where practical
+  - verification: syntax checks, negative tests, GitHub CI if added
+  - evidence: `per-repo/ralph-loop/01-session-start-load-context.sh`, `global/ralph-loop-validate.py`, `.github/workflows/ci.yml`, `tests/negative-ralph-loop-enforcement.sh`
+  - result: SessionStart now validates full Task Evidence Contract and includes AGENTS.md context; post-failure validation now blocks stale WORKPLAN and repeated hypotheses; GitHub CI workflow added; negative tests increased to 27 hard blocks.
+  - commit: pending-third-audit-commit
+  - status: done
+
+- [ ] TASK-012: Final third-round report with hook table
+  - type: review
+  - required: true
+  - scope: final audit output
+  - source_of_truth: user requested final report format
+  - success_criteria: final answer includes hook/check/result/test table and residual risks
+  - verification: final local and remote evidence
+  - evidence: pending
+  - result: pending final local and GitHub checks
+  - commit: pending-third-audit-commit
+  - status: in_progress

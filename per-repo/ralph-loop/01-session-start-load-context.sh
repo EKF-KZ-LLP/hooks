@@ -38,6 +38,14 @@ if ! grep -qE "^- \[[ xX~]\]" "$tracker" 2>/dev/null; then
 fi
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+validator="${RALPH_GLOBAL_HOOKS_DIR:-$HOME/.claude/hooks}/ralph-loop-validate.py"
+if [ ! -x "$validator" ]; then
+    echo "::error::ralph-loop-01: missing Ralph Loop validator at '$validator'." >&2
+    echo "Install global hooks from /Users/antonsahovskii/Dev/Hooks/global before session start can pass." >&2
+    exit 2
+fi
+python3 "$validator" validate-file --project "$repo" --file "$tracker"
+
 summary="$repo/.claude/session-context-summary.md"
 mkdir -p "$(dirname "$summary")"
 
@@ -60,6 +68,11 @@ mkdir -p "$(dirname "$summary")"
     echo "## Project rules (CLAUDE.md)"
     if [ -f "$repo/CLAUDE.md" ]; then
         head -40 "$repo/CLAUDE.md"
+    fi
+    echo
+    echo "## Project AGENTS.md"
+    if [ -f "$repo/AGENTS.md" ]; then
+        head -80 "$repo/AGENTS.md"
     fi
 } | head -200 > "$summary"
 
