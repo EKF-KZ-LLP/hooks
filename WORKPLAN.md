@@ -151,7 +151,7 @@
   - verification: code audit, hook mapping, GitHub run inspection, negative tests
   - evidence: `HANDOFF.md`, `gh run view 25717629767`, `tests/negative-ralph-loop-enforcement.sh`
   - result: CodeQL success on GitHub was verified. Third-round local audit found four HIGH gaps: session start accepted invalid tracker contracts, failed verification did not require WORKPLAN freshness, repeated failed verification could reuse hypothesis until blocked/failed, and GitHub CI did not run negative tests.
-  - commit: pending-third-audit-commit
+  - commit: 91f78ed765c995cb01b79c3e76172532c68c37c2
   - status: done
 
 - [ ] TASK-011: Close third-round BLOCKING/HIGH gaps
@@ -163,7 +163,7 @@
   - verification: syntax checks, negative tests, GitHub CI if added
   - evidence: `per-repo/ralph-loop/01-session-start-load-context.sh`, `global/ralph-loop-validate.py`, `.github/workflows/ci.yml`, `tests/negative-ralph-loop-enforcement.sh`
   - result: SessionStart now validates full Task Evidence Contract and includes AGENTS.md context; post-failure validation now blocks stale WORKPLAN and repeated hypotheses; GitHub CI workflow added; negative tests increased to 27 hard blocks.
-  - commit: pending-third-audit-commit
+  - commit: 91f78ed765c995cb01b79c3e76172532c68c37c2
   - status: done
 
 - [ ] TASK-012: Final third-round report with hook table
@@ -173,7 +173,7 @@
   - source_of_truth: user requested final report format
   - success_criteria: final answer includes hook/check/result/test table and residual risks
   - verification: final local and remote evidence
-  - evidence: pending
-  - result: pending final local and GitHub checks
-  - commit: pending-third-audit-commit
-  - status: in_progress
+  - evidence: local checks, GitHub CI run `25717864870`, GitHub CodeQL runs `25717863960` and `25717867141`
+  - result: Local checks pass, CI run is success, CodeQL runs are success. Final report can use hook/result/test table.
+  - commit: 91f78ed765c995cb01b79c3e76172532c68c37c2
+  - status: done
