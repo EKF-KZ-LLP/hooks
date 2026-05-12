@@ -12,7 +12,7 @@
 set -euo pipefail
 
 log()  { printf '%s\n' "$*" >&2; }
-warn() { log "⚠️  assertion-change-guard: $*"; }
+warn() { log "WARN assertion-change-guard: $*"; }
 
 FILE_PATH="${1:-}"
 if [ -z "$FILE_PATH" ]; then
@@ -45,11 +45,11 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # Diff of THIS test file (both unstaged and staged, whichever holds the change).
-DIFF=$(git -c color.ui=never -c diff.external= -c core.pager=cat diff -- "$FILE_PATH" 2>/dev/null; git -c color.ui=never -c diff.external= -c core.pager=cat diff --cached -- "$FILE_PATH" 2>/dev/null)
+DIFF=$(git -c color.ui=never -c core.pager=cat diff -- "$FILE_PATH" 2>/dev/null; git -c color.ui=never -c core.pager=cat diff --cached -- "$FILE_PATH" 2>/dev/null)
 [ -z "$DIFF" ] && exit 0
 
 # An "assertion change" is a line that *adds or removes* an assert/expect/require.
-ASSERT_DIFF=$(printf '%s' "$DIFF" | grep -E '^[+-][^+-].*(assert\.|require\.|expect\(|^[+-][[:space:]]*assert[[:space:]])' || true)
+ASSERT_DIFF=$(printf '%s' "$DIFF" | grep -E '^[+-][^+-].*(assert\.|require\.|expect\()|^[+-][[:space:]]+assert[[:space:]]' || true)
 [ -z "$ASSERT_DIFF" ] && exit 0  # no assertion touched
 
 # Case (b): new test func added in the SAME diff → legitimate (adding a case).
@@ -68,28 +68,22 @@ fi
 
 # Case (c): testcase-id reference anywhere in the slice diff?
 # Accepts "TC-123", "Refs #N", "Fixes #N", "Closes #N", "testcase:" in a +added comment.
-SLICE_DIFF=$(git -c color.ui=never -c diff.external= -c core.pager=cat diff 2>/dev/null; git -c color.ui=never -c diff.external= -c core.pager=cat diff --cached 2>/dev/null)
+SLICE_DIFF=$(git -c color.ui=never -c core.pager=cat diff 2>/dev/null; git -c color.ui=never -c core.pager=cat diff --cached 2>/dev/null)
 if printf '%s' "$SLICE_DIFF" | grep -qE '^\+.*(TC-[0-9]+|testcase[[:space:]]*[:=]|(Refs|Fixes|Closes)[[:space:]]*#[0-9]+)'; then
   exit 0
 fi
 
-# All three exits failed → surface a (non-blocking) warning so the agent can
-# decide with full context. The CLAUDE.md rule + CI test-quality job do the
-# hard enforcement on PR.
+# All three exits failed. This is a hard block: optional guard means
+# "enforced when installed", not a reminder.
 log ""
-log "┌─ assertion-change-guard ⚠  $FILE_PATH"
-log "│ You modified assertion(s) without:"
-log "│   (a) changing production code in the same slice,"
-log "│   (b) adding a new test function (new case), or"
-log "│   (c) referencing a testcase id / issue (TC-XXX or Fixes #N) in the diff."
-log "│"
-log "│ Iron rule 21 (CLAUDE.md): a red test is information - don't silence it"
-log "│ by editing the expectation. Verify against the testcase spec first."
-log "│ If the test was genuinely wrong, add the testcase-id reference in the"
-log "│ diff (a comment in the test or in your next commit message)."
-log "│"
-log "│ Changed assertion lines:"
-printf '%s\n' "$ASSERT_DIFF" | head -6 | awk '{ print "│   " $0 }' >&2
-log "└─ (warning only - continuing)"
+log "assertion-change-guard blocked $FILE_PATH"
+log "You modified assertion(s) without:"
+log "  - changing production code in the same slice,"
+log "  - adding a new test function, or"
+log "  - referencing a testcase id / issue in the diff."
+log ""
+log "A red test is information. Do not silence it by editing the expectation."
+log "Changed assertion lines:"
+printf '%s\n' "$ASSERT_DIFF" | head -6 | awk '{ print "  " $0 }' >&2
 
-exit 0
+exit 2

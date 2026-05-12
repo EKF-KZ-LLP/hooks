@@ -36,12 +36,12 @@ esac
 
 # Block patterns inside SQL-tool invocation only.
 PATTERNS=(
-  'drop database'
-  'drop schema'
-  'drop table'
-  'truncate table'
-  'delete from .* where 1=1'
-  'delete from .* where 1 = 1'
+  'drop[[:space:]]+database'
+  'drop[[:space:]]+schema'
+  'drop[[:space:]]+table'
+  'truncate([[:space:]]+table)?[[:space:]]+[a-z0-9_."`]+'
+  'delete[[:space:]]+from[[:space:]]+[a-z0-9_."`]+'
+  'alter[[:space:]]+table[[:space:]]+.*[[:space:]]+drop[[:space:]]+column'
 )
 
 for pat in "${PATTERNS[@]}"; do

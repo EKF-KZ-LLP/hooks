@@ -20,7 +20,7 @@ set -euo pipefail
 
 log()  { printf '%s\n' "$*" >&2; }
 fail() { log "❌ test-data-guard: $*"; exit 2; }
-warn() { log "⚠️  test-data-guard: $*"; }
+warn() { log "WARN test-data-guard: $*"; }
 
 FILE_PATH="${1:-}"
 if [ -z "$FILE_PATH" ]; then
@@ -72,7 +72,7 @@ fi
 # Tests touched alongside fixture. Now: was production code touched too?
 if [ -n "$PROD_TOUCHED" ]; then
   # Behavior change path: fixture + prod + test - legitimate. Pass with note.
-  log "ℹ️  test-data-guard: fixture + production + tests edited together - ok ($FILE_PATH)."
+  log "INFO test-data-guard: fixture + production + tests edited together - ok ($FILE_PATH)."
   exit 0
 fi
 
@@ -83,8 +83,8 @@ ASSERT_LINE_CHANGE=0
 NEW_TEST_ADDED=0
 while IFS= read -r testfile; do
   [ -z "$testfile" ] && continue
-  DIFF=$(git -c color.ui=never -c diff.external= -c core.pager=cat diff -- "$testfile" 2>/dev/null; git -c color.ui=never -c diff.external= -c core.pager=cat diff --cached -- "$testfile" 2>/dev/null)
-  if printf '%s' "$DIFF" | grep -qE '^\+.*(assert\.|require\.|expect\(|^[[:space:]]*assert[[:space:]])'; then
+  DIFF=$(git -c color.ui=never -c core.pager=cat diff -- "$testfile" 2>/dev/null; git -c color.ui=never -c core.pager=cat diff --cached -- "$testfile" 2>/dev/null)
+  if printf '%s' "$DIFF" | grep -qE '^\+.*(assert\.|require\.|expect\()|^\+[[:space:]]+assert[[:space:]]'; then
     ASSERT_LINE_CHANGE=1
   fi
   if printf '%s' "$DIFF" | grep -qE '^\+.*(func[[:space:]]+Test[A-Z]|it\(|test\(|def[[:space:]]+test_)'; then

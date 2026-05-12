@@ -43,3 +43,6 @@ jobs:
 
       - name: Negative enforcement tests
         run: tests/negative-ralph-loop-enforcement.sh
+
+      - name: Optional guard tests
+        run: tests/optional-guards-enforcement.sh

@@ -27,7 +27,7 @@ fi
 
 # Match search-y commands
 case "$CMD" in
-  *grep\ *|*\ rg\ *|*ripgrep*|*\ find\ *|*\ fd\ *|*\ ack\ *|*\ ag\ *) ;;
+  grep\ *|*grep\ *|rg\ *|*\ rg\ *|ripgrep*|find\ *|*\ find\ *|fd\ *|*\ fd\ *|ack\ *|*\ ack\ *|ag\ *|*\ ag\ *) ;;
   *) exit 0 ;;
 esac
 

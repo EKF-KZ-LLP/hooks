@@ -183,6 +183,30 @@
   commit: 48aeb27553460d4a3c361614e70fee2c800f80c3
   timestamp: 2026-05-12T00:00:00+03:00
 
+- attempt: 15
+  task_id: TASK-014
+  trigger: other
+  hypothesis: Optional guards were only syntax-checked before; a separate audit may find stack-specific enforcement gaps or documentation ambiguity.
+  action: Confirmed clean git state and listed optional guard files before editing.
+  command_or_artifact: `git status --short --branch`; `rg --files per-repo/optional-guards tests README.md SETUP-PROMPT.md`; `sed -n '1,260p' WORKPLAN.md`; `sed -n '1,320p' HANDOFF.md`
+  result: Optional guards are present but not covered by dedicated negative tests. Need semantic audit and "подключать когда" table.
+  next_decision: inspect each optional guard and add tests/fixes
+  evidence: `WORKPLAN.md`
+  commit: 7380ea83d211db492620324df0ecafec90a6b11c
+  timestamp: 2026-05-12T00:00:00+03:00
+
+- attempt: 16
+  task_id: TASK-014
+  trigger: other
+  hypothesis: Optional guards must be proven by stack-specific negative tests; warning-only behavior and fail-open diff collection are not enforcement.
+  action: Converted assertion-change guard to hard block, removed `git -c diff.external=` fail-open paths, broadened destructive SQL patterns, fixed graphify search command matching, fixed Python trivial-assert detection, added dedicated optional negative tests, wired the suite into GitHub CI, and documented when to connect each optional guard.
+  command_or_artifact: `python3 -m py_compile global/ralph-loop-validate.py`; `while IFS= read -r file; do bash -n "$file"; done < <(find global per-repo tests -name '*.sh' -type f | sort)`; `git diff --check`; forbidden-symbol scan; `tests/negative-ralph-loop-enforcement.sh`; `tests/optional-guards-enforcement.sh`
+  result: Local checks pass. Main negative suite reports `negative tests passed: 29`. Optional suite reports `optional guard tests passed: 8`.
+  next_decision: commit, push, then verify GitHub CI and CodeQL on the optional-guards commit
+  evidence: `tests/optional-guards-enforcement.sh`
+  commit: pending-optional-guards-commit
+  timestamp: 2026-05-12T11:00:57+03:00
+
 ## Gate Audit Draft
 - 35-gate audit completed. Gaps moved from PARTIAL/NO to enforced where local hook code can enforce them.
 - Repeat 35-gate audit completed after GitHub repo creation. Gaps moved from PARTIAL/NO to enforced where local hook code can enforce them.

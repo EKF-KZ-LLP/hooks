@@ -181,16 +181,18 @@ Hard rules:
 
 ## Optional guards (`optional-guards/`)
 
-Подключай только если применимо к стеку проекта.
+Подключай только если guard подходит стеку проекта. Optional не значит слабый:
+если guard подключен, его blocking cases должны давать non-zero exit или
+Claude `deny`.
 
-| Hook | Event | Где нужен |
-|------|-------|-----------|
-| `assertion-change-guard.sh` | PostToolUse Edit `*_test.go` | Go тесты: assert изменен без production change → fail |
-| `test-data-guard.sh` | PostToolUse Edit `*_test.go` | Go тесты: блок правки fixture без justification |
-| `test-quality-gate.sh` | PostToolUse Edit/Write `*_test.{go,py,ts,tsx}` | Multi-lang: trivial assert / empty body / mock-only → fail |
-| `destructive-sql-guard.sh` | PreToolUse Bash | Любой репо с PG/CH/MySQL: DROP/TRUNCATE через psql/clickhouse-client → deny |
-| `graphify-hint.sh` | PreToolUse Bash | Если есть graphify knowledge graph: hint на GRAPH_REPORT.md |
-| `validate-issue-close.sh` | вспомогательный | Pre-flight для `gh issue close <num>` |
+| Hook | Event | Подключать когда | Что блокирует или делает | Проверка |
+|------|-------|------------------|--------------------------|----------|
+| `assertion-change-guard.sh` | PostToolUse Edit `*_test.go`, `*_test.py`, `*.test.ts`, `*.spec.ts` | Есть unit/integration tests и важен запрет "подкрутить assert под код" | Блокирует assertion-only test change без production/source change в той же git slice | `tests/optional-guards-enforcement.sh`: `assertion-only test change` |
+| `test-data-guard.sh` | PostToolUse Edit fixtures/snapshots/golden/testdata | Есть fixtures, snapshots, golden files, testdata | Блокирует fixture + assertion change без production/source change | `tests/optional-guards-enforcement.sh`: `fixture plus assertion without production` |
+| `test-quality-gate.sh` | PostToolUse Edit/Write `*_test.go`, `test_*.py`, `*_test.py`, `*.test.ts(x)`, `*.spec.ts(x)` | Есть Go/Python/TS тесты | Блокирует trivial assert, empty body, skip без issue, TS/Python mock-only. Go mock-only пока warning из-за AST ambiguity | `tests/optional-guards-enforcement.sh`: `trivial Python assertion`, `skip without issue ticket` |
+| `destructive-sql-guard.sh` | PreToolUse Bash | Есть PG, ClickHouse, MySQL, migration scripts или prod-like DB доступ | Deny для `DROP DATABASE/SCHEMA/TABLE`, `TRUNCATE`, `DELETE FROM`, `ALTER TABLE ... DROP COLUMN` в shell command | `tests/optional-guards-enforcement.sh`: `destructive SQL delete`, `destructive SQL truncate` |
+| `graphify-hint.sh` | PreToolUse Bash search commands | В repo есть `graphify-out/graph.json` или `graphify-out/GRAPH_REPORT.md` | Не блокирует. Добавляет `additionalContext`, что перед raw search нужно смотреть graph report | `tests/optional-guards-enforcement.sh`: `graphify additionalContext` |
+| `validate-issue-close.sh` | Helper before `gh issue close <num>` | Проект ведет GitHub Issues с Definition of Done checkboxes | Блокирует закрытие issue с незакрытыми DoD checkbox-ами или без `✅` markers в комментариях | `tests/optional-guards-enforcement.sh`: `issue close with unchecked DoD` |
 
 ---
 

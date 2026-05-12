@@ -191,3 +191,17 @@
   - result: PR merge gate now treats GitHub human review as informational and requires current Codex review evidence with Claude Code plugin, `codex:rescue`, `codex:codex-rescue`, `AGENTS.md`, `verbatim`, `full-code-path`, `Command`, `Result` and current commit. Negative tests now include "merge without Codex evidence" block and "pending GitHub human review allowed with Codex evidence" allow. Local checks passed, GitHub CI passed, GitHub CodeQL passed.
   - commit: 48aeb27553460d4a3c361614e70fee2c800f80c3
   - status: done
+
+## Optional Guards Audit
+
+- [ ] TASK-014: Audit optional guards and prove stack-specific hard blocks
+  - type: test
+  - required: true
+  - scope: `per-repo/optional-guards/`, `tests/`, `README.md`, `SETUP-PROMPT.md`
+  - source_of_truth: user request for optional-guards audit, negative tests and "подключать когда" table
+  - success_criteria: every optional guard has a clear applicability rule, hard-block behavior, negative test or documented non-blocking status, and all BLOCKING/HIGH gaps fixed
+  - verification: shell syntax, optional negative test harness, main negative harness, GitHub CI/CodeQL
+  - evidence: `tests/optional-guards-enforcement.sh`, `tests/negative-ralph-loop-enforcement.sh`, `README.md`, `SETUP-PROMPT.md`
+  - result: Optional guard audit found HIGH gaps in assertion-change hard blocking, diff fail-open paths, destructive SQL breadth, graphify command matching and missing dedicated negative tests. Fixed local hooks, added optional negative suite with 8 checks, added CI step and updated the "подключать когда" table.
+  - commit: pending-optional-guards-commit
+  - status: verified

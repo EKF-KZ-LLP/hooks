@@ -57,11 +57,15 @@ hooks и удалит дубли.
 ЭТАП 3 - OPTIONAL GUARDS (по стеку)
 9. Из /Users/antonsahovskii/Dev/Hooks/per-repo/optional-guards/
    подключи ТОЛЬКО применимые:
-   - assertion-change-guard.sh + test-data-guard.sh + test-quality-gate.sh:
-     если репо имеет Go/Python/TS тесты.
-   - destructive-sql-guard.sh: если репо имеет PG/CH/MySQL/psql.
-   - graphify-hint.sh: если репо имеет graphify-out/.
-   - validate-issue-close.sh: всегда полезно для проектов с GitHub Issues.
+   - assertion-change-guard.sh: если есть тесты и нужно блокировать
+     assertion-only change без production/source change.
+   - test-data-guard.sh: если есть fixtures/snapshots/golden/testdata.
+   - test-quality-gate.sh: если есть Go/Python/TS тесты и нужно блокировать
+     trivial assert, empty body, skip без issue, mock-only где detector надежен.
+   - destructive-sql-guard.sh: если есть PG/ClickHouse/MySQL, migration scripts
+     или prod-like DB доступ.
+   - graphify-hint.sh: если репо имеет graphify-out/. Это hint, не blocker.
+   - validate-issue-close.sh: если проект ведет GitHub Issues с DoD checkbox-ами.
    chmod +x. Wire в <repo>/.claude/settings.json hooks block с правильными
    matcher pattern.
 
@@ -104,16 +108,21 @@ hooks и удалит дубли.
     - 04-gh-pr-merge-gate:
       GitHub pending human reviewer не должен блокировать при валидном Codex evidence;
       merge без Codex evidence должен дать exit 2.
+    - optional guards, если подключены:
+      assertion-only test change, fixture + assertion change без production,
+      trivial assert, skip без issue и destructive SQL должны блокироваться.
 12. Если есть per-repo Ralph Loop: создай <repo>/.claude/active-tracker
     с валидным `TASK-001` contract и `status: in_progress` - Stop должен exit 2.
 13. Если устанавливаешь из этого repo, запусти:
     `/Users/antonsahovskii/Dev/Hooks/tests/negative-ralph-loop-enforcement.sh`
-14. Если проект хранится на GitHub, добавь или адаптируй server CI по образцу
+14. Если подключал optional guards, запусти:
+    `/Users/antonsahovskii/Dev/Hooks/tests/optional-guards-enforcement.sh`
+15. Если проект хранится на GitHub, добавь или адаптируй server CI по образцу
     `/Users/antonsahovskii/Dev/Hooks/.github/workflows/ci.yml`, чтобы
     negative enforcement tests гонялись не только локально.
 
 ЭТАП 6 - ОТЧЕТ
-15. Выведи структурированный отчет:
+16. Выведи структурированный отчет:
     - что было ДО (список существующих hooks + match с эталоном)
     - что стало ПОСЛЕ (новые/обновленные/удаленные с reasons)
     - smoke results (4 + опционально 1 stop test)
