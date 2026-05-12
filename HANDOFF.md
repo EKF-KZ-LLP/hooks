@@ -84,7 +84,7 @@
   result: All checks passed again; negative tests still report `negative tests passed: 14`.
   next_decision: final commit
   evidence: `global/ralph-loop-validate.py`
-  commit: pending-final-local-commit
+  commit: cfdcea4
   timestamp: 2026-05-12T00:00:00+03:00
 
 - attempt: 7
@@ -108,7 +108,7 @@
   result: Remote is reachable but exposes no refs, PRs or runs. Local PR HEAD mismatch bypass is blocked by `test_pr_head_mismatch_blocks_merge`.
   next_decision: keep remote live CI/CodeQL as residual until a real PR exists
   evidence: `tests/negative-ralph-loop-enforcement.sh`
-  commit: pending-final-local-commit
+  commit: cfdcea4
   timestamp: 2026-05-12T00:00:00+03:00
 
 - attempt: 9

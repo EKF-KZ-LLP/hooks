@@ -112,7 +112,7 @@
   - verification: code audit, git/remote inspection, local hook tests
   - evidence: `HANDOFF.md`, `global/ralph-loop-validate.py`, `tests/negative-ralph-loop-enforcement.sh`
   - result: Fresh audit completed. All local enforceable gates now map to hard blockers; remote live CI/CodeQL/review remains unproven without a real PR but local merge-gate mocks prove fail-closed and stale PR HEAD behavior.
-  - commit: pending-final-local-commit
+  - commit: cfdcea4
   - status: done
 
 - [ ] TASK-008: Prove remote/PR gate behavior as far as possible
@@ -124,7 +124,7 @@
   - verification: `git remote`, `git ls-remote`, `gh`/git checks where available
   - evidence: `git ls-remote origin`, `gh pr list`, `gh run list`, `tests/negative-ralph-loop-enforcement.sh`
   - result: Remote `origin` was configured and inspected. GitHub repo is reachable but has no refs, PRs or runs. Added PR HEAD mismatch negative test so old review evidence cannot pass a merge gate.
-  - commit: pending-final-local-commit
+  - commit: cfdcea4
   - status: done
 
 - [ ] TASK-009: Update tests/docs if repeat audit finds gaps
@@ -136,5 +136,5 @@
   - verification: syntax checks, negative tests, git diff check
   - evidence: `README.md`, `SETUP-PROMPT.md`, `global/record-pre-fix-failing-test.sh`, `per-repo/ralph-loop/15-post-verification-failure-gate.sh`, `tests/negative-ralph-loop-enforcement.sh`
   - result: Added post-verification failure hook, pre-fix failing-test recorder, stricter PR evidence freshness, HANDOFF anti-deletion checks, destructive-action blocks and 8 new negative tests. Negative harness now reports 22 blocking tests.
-  - commit: pending-final-local-commit
+  - commit: cfdcea4
   - status: done
