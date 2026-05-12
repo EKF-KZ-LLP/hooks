@@ -23,6 +23,7 @@
 │   ├── block-user-questions.sh     (PreToolUse Write/Edit: keyword guard)
 │   ├── ralph-loop-enforce.sh       (PreToolUse Edit/Write/MultiEdit: TEC + Ralph Loop)
 │   ├── ralph-loop-validate.py      (общий hard validator)
+│   ├── record-pre-fix-failing-test.sh (helper: пишет легальный pre-fix FAIL evidence)
 │   ├── run-codex-review-infra.sh   (helper: Codex review через Claude Code plugin runtime)
 │   └── gitnexus/
 │       └── gitnexus-hook.cjs       (PreToolUse Bash/Grep/Glob: подсказка про knowledge graph)
@@ -41,7 +42,8 @@
     │   ├── 11-post-edit-tests-required.sh
     │   ├── 12-pre-checkbox-flip-deep-review.sh
     │   ├── 13-pre-stop-deploy-green-gate.sh
-    │   └── 14-pre-commit-evidence-gate.sh
+    │   ├── 14-pre-commit-evidence-gate.sh
+    │   └── 15-post-verification-failure-gate.sh
     ├── psa-style-ralph/            ← альтернативная Ralph Loop (PSA, другие имена)
     │   ├── session-start.sh
     │   ├── user-prompt-submit.sh
@@ -71,6 +73,7 @@
 | `block-user-questions.sh` | PreToolUse Write\|Edit | Keyword guard fabricated "ask user" patterns | Сваливание решений когда есть ADR/план |
 | `ralph-loop-enforce.sh` | PreToolUse Edit\|Write\|MultiEdit | Wrapper над `ralph-loop-validate.py`. Блокирует invalid Task Evidence Contract, stale evidence SHA, blocked/failed без Ralph Loop, source edit вне scope, code edit без pre-fix failing test evidence. | Markdown checkbox tamper, stale logs, fake blocked/failed, fake Codex evidence |
 | `ralph-loop-validate.py` | helper | Общий валидатор для pretool, stop, precommit, validate-file. | Единый hard enforcement вместо разрозненных подсказок |
+| `record-pre-fix-failing-test.sh` | helper | Запускает test command и пишет `.checkpoints/<TASK-ID>/pre-fix-failing-test.md` только если команда реально упала. | Самописный pre-fix evidence без FAIL |
 | `run-codex-review-infra.sh` | helper | Запускает Codex через Claude Code Codex plugin companion, пишет evidence с `Claude Code plugin`, `codex:rescue`, `codex:codex-rescue`, `full-code-path`, `Command`, `Result`, `Commit`. | `codex exec` и самописный review evidence больше не проходят strict validator |
 | `gitnexus/gitnexus-hook.cjs` | PreToolUse Bash\|Grep\|Glob | На `grep/find/rg/fd`-команды показывает «есть граф знаний - читай GRAPH_REPORT.md» | Brute search vs indexed graph |
 
@@ -92,6 +95,7 @@
 | `12-pre-checkbox-flip-deep-review.sh` | PreToolUse Edit | Проверяет deep-review sections перед checkbox close. |
 | `13-pre-stop-deploy-green-gate.sh` | Stop\|SubagentStop | Opt-in deploy green gate. |
 | `14-pre-commit-evidence-gate.sh` | PreToolUse Bash | Блокирует `git commit`, если tracker evidence или WORKPLAN/HANDOFF stale. |
+| `15-post-verification-failure-gate.sh` | PostToolUse Bash | После failed tests/lint/typecheck/CI/review/Codex требует свежий attempt в `HANDOFF.md` с evidence. |
 
 ## Task Evidence Contract
 
@@ -148,6 +152,8 @@ Hard rules:
 - external/tooling/library/API blockers require internet/Context7/official docs search evidence.
 - stuck tasks require Senior Engineer or Codex via `codex:rescue`.
 - generic blockers like "тесты падают", "не получилось", "ошибка" are blocked.
+- failed verification commands trigger hook 15 and block next progress until `HANDOFF.md` has a fresh attempt entry.
+- behavior-changing code edits require `.checkpoints/<TASK-ID>/pre-fix-failing-test.md`, produced by `record-pre-fix-failing-test.sh TASK-001 -- <test command>`.
 
 ## Per-repo PSA-style Ralph Loop (`psa-style-ralph/`)
 

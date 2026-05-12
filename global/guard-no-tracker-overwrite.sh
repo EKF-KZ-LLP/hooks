@@ -74,6 +74,7 @@ WRITE_INTENT_RE='(>>?|>\|)[[:space:]]*|'\
 '\bgit[[:space:]]+(checkout|restore|rm|mv|apply|reset[[:space:]]+--hard|stash[[:space:]]+(pop|apply)|clean[[:space:]]+-f[dx]*|am|filter-branch|filter-repo|replace)\b|'\
 '\bgit-(filter-branch|filter-repo|checkout|restore|rm|mv|apply|reset|stash|clean|am|replace)\b|'\
 '\brsync\b|'\
+'\btouch\b|'\
 '\bunzip[[:space:]]+[^|;&]*-o\b|'\
 '\btar[[:space:]]+[^|;&]*(--overwrite|-x[^[:space:]]*f|--extract)|'\
 '\bscp\b|'\
@@ -95,7 +96,7 @@ if printf '%s' "$CMD" | grep -qE "$WRITE_INTENT_RE"; then
      && [[ "${RALPH_LEGIT_CHMOD:-}" == "1" ]]; then
     exit 0
   fi
-  echo "::error::guard-no-tracker-overwrite: Bash command references a tracker/evidence file AND uses a write-intent verb (redirect, tee, sed -i, awk -i inplace, perl -pi, python/node write, truncate, dd, cp, mv, install, ln, chmod, chown). Use Edit/Write tool so anti-cheat hook chain runs. Protected files: tracker/active-tracker, WORKPLAN/HANDOFF, checkpoint evidence, attempt, pre-fix, review and skip-reason files. Legitimate evidence is produced by approved helper hooks, not direct shell writes." >&2
+  echo "::error::guard-no-tracker-overwrite: Bash command references a tracker/evidence file AND uses a write-intent verb (redirect, tee, sed -i, awk -i inplace, perl -pi, python/node write, truncate, dd, cp, mv, install, ln, chmod, chown, touch). Use Edit/Write tool so anti-cheat hook chain runs. Protected files: tracker/active-tracker, WORKPLAN/HANDOFF, checkpoint evidence, attempt, pre-fix, review and skip-reason files. Legitimate evidence is produced by approved helper hooks, not direct shell writes." >&2
   exit 2
 fi
 

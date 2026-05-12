@@ -205,6 +205,7 @@ fi
 local_pass=0
 project_pass=0
 server_pass=0
+accepted_evidence_files=""
 current_sha=$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)
 
 review_evidence_ok() {
@@ -244,6 +245,8 @@ if [ -f "$active_pointer" ]; then
                 evidence_abs="$repo/$evidence_rel"
                 if review_evidence_ok "$evidence_abs"; then
                     local_pass=1
+                    accepted_evidence_files="$accepted_evidence_files
+$evidence_abs"
                 fi
             fi
         fi
@@ -255,9 +258,34 @@ if [ -d "$repo/docs/superpowers/reviews" ]; then
         [ -f "$f" ] || continue
         if review_evidence_ok "$f"; then
             project_pass=1
+            accepted_evidence_files="$accepted_evidence_files
+$f"
             break
         fi
     done
+fi
+
+solo_codex_file=""
+solo_senior_file=""
+ev_dir_solo="$repo/.claude/evidence/PR-$mr_num"
+if [ -d "$ev_dir_solo" ]; then
+    for codex_f in "$ev_dir_solo/codex-review.md" "$ev_dir_solo/codex-round2.md" "$ev_dir_solo/codex-round3.md"; do
+        [ -f "$codex_f" ] || continue
+        if review_evidence_ok "$codex_f"; then
+            solo_codex_file="$codex_f"
+            break
+        fi
+    done
+    senior_f="$ev_dir_solo/senior-review.md"
+    if [ -f "$senior_f" ] && review_evidence_ok "$senior_f"; then
+        solo_senior_file="$senior_f"
+    fi
+    if [ -n "$solo_codex_file" ] && [ -n "$solo_senior_file" ]; then
+        local_pass=1
+        accepted_evidence_files="$accepted_evidence_files
+$solo_codex_file
+$solo_senior_file"
+    fi
 fi
 
 if [ "$is_glab_merge" -eq 1 ] && command -v glab >/dev/null 2>&1; then
@@ -315,20 +343,8 @@ if [ "$is_gh_merge" -eq 1 ]; then
 
     solo_codex_pass=0
     solo_senior_pass=0
-    ev_dir_solo="$repo/.claude/evidence/PR-$mr_num"
-    if [ -d "$ev_dir_solo" ]; then
-        for codex_f in "$ev_dir_solo/codex-review.md" "$ev_dir_solo/codex-round2.md" "$ev_dir_solo/codex-round3.md"; do
-            [ -f "$codex_f" ] || continue
-            if grep -qiE '^(verdict:[[:space:]]+pass|recommendation:[[:space:]]+approve)\b' "$codex_f"; then
-                solo_codex_pass=1
-                break
-            fi
-        done
-        senior_f="$ev_dir_solo/senior-review.md"
-        if [ -f "$senior_f" ] && grep -qiE '^(verdict:[[:space:]]+pass|recommendation:[[:space:]]+approve)\b' "$senior_f"; then
-            solo_senior_pass=1
-        fi
-    fi
+    [ -n "$solo_codex_file" ] && solo_codex_pass=1
+    [ -n "$solo_senior_file" ] && solo_senior_pass=1
 
     if [ "$review_decision" != "APPROVED" ]; then
         if [ "$solo_codex_pass" -eq 1 ] && [ "$solo_senior_pass" -eq 1 ]; then
@@ -356,6 +372,23 @@ if [ "$is_gh_merge" -eq 1 ]; then
     # G24: stale-SHA
     head_sha=$(gh pr view "$mr_num" --json headRefOid --jq .headRefOid 2>/dev/null || true)
     if [ -n "$head_sha" ]; then
+        missing_pr_head=""
+        while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ -f "$f" ] || continue
+            if ! grep -q "$head_sha" "$f"; then
+                missing_pr_head="$missing_pr_head
+  - $f missing PR head $head_sha"
+            fi
+        done <<EOF
+$accepted_evidence_files
+EOF
+        if [ -n "$missing_pr_head" ]; then
+            echo "::error::ralph-loop-04: PR #$mr_num review evidence does not match PR HEAD:" >&2
+            printf '%b\n' "$missing_pr_head" >&2
+            echo "Resolve: re-run Senior + codex:rescue review on current PR HEAD." >&2
+            exit 2
+        fi
         ev_dir="$repo/.claude/evidence/PR-$mr_num"
         stale_files=""
         if [ -d "$ev_dir" ]; then

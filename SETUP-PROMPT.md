@@ -40,8 +40,8 @@ hooks и удалит дубли.
    не expands в некоторых версиях Claude Code.
 
 ЭТАП 2 - PER-REPO RALPH LOOP (выбери ОДИН вариант)
-8a. ВАРИАНТ A (canonical Ralph Loop, 14 файлов): скопируй
-    /Users/antonsahovskii/Dev/Hooks/per-repo/ralph-loop/01-*.sh ... 14-*.sh
+8a. ВАРИАНТ A (canonical Ralph Loop, 15 файлов): скопируй
+    /Users/antonsahovskii/Dev/Hooks/per-repo/ralph-loop/01-*.sh ... 15-*.sh
     в <repo>/.claude/hooks/. chmod +x. Используй если хочешь
     максимальную discipline и готов писать tracker в строгом формате.
 
@@ -96,6 +96,11 @@ hooks и удалит дубли.
     - ralph-loop-enforce:
       попробуй закрыть `[x] TASK-001` без `.checkpoints/TASK-001/evidence.md`
       с `Command/Result/Commit` - должен deny.
+    - record-pre-fix-failing-test:
+      команда, которая проходит, должна дать exit 2; команда, которая падает,
+      должна создать `.checkpoints/TASK-001/pre-fix-failing-test.md`.
+    - 15-post-verification-failure-gate:
+      failed `pytest`/`lint` без свежего attempt в `HANDOFF.md` должен дать exit 2.
 12. Если есть per-repo Ralph Loop: создай <repo>/.claude/active-tracker
     с валидным `TASK-001` contract и `status: in_progress` - Stop должен exit 2.
 13. Если устанавливаешь из этого repo, запусти:
@@ -111,7 +116,7 @@ hooks и удалит дубли.
 
 КРИТЕРИИ ГОТОВНОСТИ:
 - Все файлы из `global/` + gitnexus подпапка в claude-home (chmod +x для executable).
-- 14 (вариант A) или 4 (вариант B) per-repo hooks в <repo>/.claude/hooks/
+- 15 (вариант A) или 4 (вариант B) per-repo hooks в <repo>/.claude/hooks/
   (chmod +x).
 - 0..6 optional guards подключены по применимости.
 - settings.json hooks block с правильными абсолютными путями.

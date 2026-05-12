@@ -95,6 +95,26 @@ CONSULT_RE = re.compile(
 )
 
 LOCAL_SOURCE_TOKENS = ["repo", "docs", "tests", "git", "logs"]
+GOVERNED_SUFFIXES = {
+    ".go",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".rs",
+    ".java",
+    ".kt",
+    ".swift",
+    ".rb",
+    ".sh",
+    ".sql",
+    ".yml",
+    ".yaml",
+    ".toml",
+    ".json",
+    ".md",
+}
 
 CHECKBOX_RE = re.compile(r"^(\s*)- \[([ xX~])\](?: \[SKIP\])?\s+(.+)$")
 TASK_ID_RE = re.compile(r"^(?:\*\*)?([A-Z][A-Z0-9]*-[0-9A-Z._-]+):")
@@ -231,6 +251,17 @@ def is_tracker_path(path: Path) -> bool:
 
 def is_source_path(path: Path) -> bool:
     return path.suffix in {".go", ".py", ".ts", ".tsx", ".js", ".jsx", ".rs", ".java", ".kt", ".swift", ".rb"}
+
+
+def is_governed_path(path: Path) -> bool:
+    raw = str(path)
+    if "/.git/" in raw or "/node_modules/" in raw or "/dist/" in raw or "/build/" in raw:
+        return False
+    if "/.checkpoints/" in raw or "/.claude/" in raw:
+        return False
+    if path.name in {"WORKPLAN.md", "HANDOFF.md"}:
+        return False
+    return path.suffix in GOVERNED_SUFFIXES
 
 
 def is_test_path(path: Path) -> bool:
@@ -572,6 +603,30 @@ def validate_blocked_or_failed_task(project: Path, task: Task) -> None:
         raise GateError(f"{task_id}: stuck task lacks Senior Engineer or codex:rescue consultation")
 
 
+def validate_handoff_update(project: Path, old_text: str, new_text: str) -> None:
+    old_attempts = parse_attempts(old_text)
+    new_attempts = parse_attempts(new_text)
+    if len(new_attempts) < len(old_attempts):
+        raise GateError("HANDOFF.md attempt history cannot shrink")
+    old_keys = {(item.get("task_id", ""), item.get("attempt", "")) for item in old_attempts}
+    new_keys = {(item.get("task_id", ""), item.get("attempt", "")) for item in new_attempts}
+    missing = sorted(old_keys - new_keys)
+    if missing:
+        task_id, attempt = missing[0]
+        raise GateError(f"HANDOFF.md cannot remove attempt history for {task_id} attempt {attempt}")
+    for attempt in new_attempts:
+        missing_fields = [field for field in ATTEMPT_FIELDS if not clean_value(attempt.get(field))]
+        if missing_fields:
+            raise GateError(
+                f"HANDOFF.md attempt {attempt.get('attempt', '?')} missing fields: {', '.join(missing_fields)}"
+            )
+        evidence_value = clean_value(attempt.get("evidence", ""))
+        if evidence_value and evidence_value.lower() not in {"pending", "n/a", "none"}:
+            evidence_path = resolve_path(project, evidence_value)
+            if not evidence_path.exists() or evidence_path.stat().st_size == 0:
+                raise GateError(f"HANDOFF.md attempt {attempt.get('attempt')} evidence is missing or empty")
+
+
 def changed_to_blocked_or_failed(old_text: str, new_tasks: list[Task]) -> list[Task]:
     old_tasks, _ = parse_tasks(old_text)
     old_status = {task.task_id: task.status for task in old_tasks if task.task_id}
@@ -639,12 +694,12 @@ def find_active_task(project: Path) -> Task | None:
     return None
 
 
-def validate_source_edit(project: Path, file_path: Path) -> None:
-    if not is_source_path(file_path) or is_test_path(file_path):
+def validate_governed_edit(project: Path, file_path: Path) -> None:
+    if not is_governed_path(file_path):
         return
     task = find_active_task(project)
     if not task or not task.task_id:
-        raise GateError(f"{file_path}: source edit requires an active TASK-ID")
+        raise GateError(f"{file_path}: edit requires an active TASK-ID")
     rel = str(file_path)
     try:
         rel = str(file_path.relative_to(project))
@@ -663,7 +718,7 @@ def validate_source_edit(project: Path, file_path: Path) -> None:
     if not pvc_re.search(handoff_text):
         raise GateError(f"{task.task_id}: pre-edit requires plan-vs-code check with files, mismatch and decision")
 
-    if task.task_type == "code":
+    if task.task_type == "code" and is_source_path(file_path) and not is_test_path(file_path):
         pref = project / ".checkpoints" / task.task_id / "pre-fix-failing-test.md"
         pref_text = read_text(pref)
         if not pref.exists() or not re.search(r"Result:\s*FAIL", pref_text, re.I) or not re.search(r"Command:", pref_text):
@@ -752,6 +807,68 @@ def validate_precommit(project: Path) -> None:
     if tracker and tracker.exists():
         validate_task_contract(project, read_text(tracker), closed_evidence=True)
     validate_workplan_handoff_fresh(project)
+    task = find_active_task(project)
+    staged = run(["git", "diff", "--cached", "--name-only"], cwd=project)
+    if staged and task and task.task_id:
+        scope = clean_value(task.meta.get("scope", ""))
+        for rel in staged.splitlines():
+            path = project / rel
+            if not is_governed_path(path):
+                continue
+            if rel not in scope and path.name not in scope:
+                raise GateError(f"{task.task_id}: staged file '{rel}' is outside task scope")
+
+
+def payload_exit_code(payload: dict) -> int | None:
+    candidates = [
+        payload.get("exit_code"),
+        payload.get("status"),
+        (payload.get("tool_response") or {}).get("exit_code") if isinstance(payload.get("tool_response"), dict) else None,
+        (payload.get("tool_result") or {}).get("exit_code") if isinstance(payload.get("tool_result"), dict) else None,
+        (payload.get("result") or {}).get("exit_code") if isinstance(payload.get("result"), dict) else None,
+    ]
+    for value in candidates:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
+            return int(value.strip())
+    return None
+
+
+def is_failure_trigger(command: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(test|pytest|unittest|go test|npm test|pnpm test|yarn test|vitest|jest|lint|eslint|ruff|flake8|pylint|typecheck|tsc|mypy|pyright|gh pr checks|gh run|codeql|codex|review)\b",
+            command,
+            re.IGNORECASE,
+        )
+    )
+
+
+def validate_recent_failed_attempt(project: Path, command: str) -> None:
+    task = find_active_task(project)
+    if not task or not task.task_id:
+        raise GateError("verification failed but no active TASK-ID is available for Ralph Loop attempt logging")
+    handoff = project / "HANDOFF.md"
+    attempts = [item for item in parse_attempts(read_text(handoff)) if clean_value(item.get("task_id", "")) == task.task_id]
+    if not attempts:
+        raise GateError(f"{task.task_id}: verification failed but HANDOFF.md has no attempt entry")
+    latest = attempts[-1]
+    missing = [field for field in ATTEMPT_FIELDS if not clean_value(latest.get(field))]
+    if missing:
+        raise GateError(f"{task.task_id}: latest failed attempt missing fields: {', '.join(missing)}")
+    validate_attempt_evidence(project, latest, task.task_id)
+    evidence_path = resolve_path(project, clean_value(latest.get("evidence", "")))
+    try:
+        age = max(0.0, __import__("time").time() - evidence_path.stat().st_mtime)
+    except FileNotFoundError:
+        raise GateError(f"{task.task_id}: failed attempt evidence missing")
+    if age > 900:
+        raise GateError(f"{task.task_id}: failed attempt evidence is stale ({int(age)}s old)")
+    artifact = f"{latest.get('command_or_artifact', '')}\n{read_text(evidence_path)}"
+    command_token = command.strip().split()[0] if command.strip() else ""
+    if command_token and command_token not in artifact:
+        raise GateError(f"{task.task_id}: latest attempt does not reference failed command '{command_token}'")
 
 
 def handle_pretool(project: Path) -> None:
@@ -765,10 +882,28 @@ def handle_pretool(project: Path) -> None:
     file_path, old_text, post_text, _ = apply_tool_payload(project, payload)
     if not file_path:
         return
-    if is_tracker_path(file_path):
+    if file_path.name == "HANDOFF.md":
+        validate_handoff_update(project, old_text, post_text)
+    elif is_tracker_path(file_path):
         validate_tracker_update(project, old_text, post_text)
     else:
-        validate_source_edit(project, file_path)
+        validate_governed_edit(project, file_path)
+
+
+def handle_posttool_failure(project: Path) -> None:
+    raw = sys.stdin.read()
+    if not raw.strip():
+        return
+    payload = json.loads(raw)
+    if (payload.get("tool_name") or "") != "Bash":
+        return
+    command = ((payload.get("tool_input") or {}).get("command") or "").strip()
+    code = payload_exit_code(payload)
+    if code is None or code == 0:
+        return
+    if not is_failure_trigger(command):
+        return
+    validate_recent_failed_attempt(project, command)
 
 
 def handle_validate_file(project: Path, file_path: Path) -> None:
@@ -777,7 +912,7 @@ def handle_validate_file(project: Path, file_path: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["pretool", "stop", "precommit", "validate-file"])
+    parser.add_argument("mode", choices=["pretool", "posttool-failure", "stop", "precommit", "validate-file"])
     parser.add_argument("--project")
     parser.add_argument("--file")
     args = parser.parse_args()
@@ -785,6 +920,8 @@ def main() -> int:
     try:
         if args.mode == "pretool":
             handle_pretool(project)
+        elif args.mode == "posttool-failure":
+            handle_posttool_failure(project)
         elif args.mode == "stop":
             validate_stop(project)
         elif args.mode == "precommit":

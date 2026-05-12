@@ -8,6 +8,28 @@ if [ -z "$COMMAND" ]; then
     exit 0
 fi
 
+# Explicit approval token for destructive local operations. This is not
+# accepted for force-push to main/master; those stay hard blocked below.
+has_approval=0
+if echo "$COMMAND" | grep -qE -- '--destructive-approved|RALPH_DESTRUCTIVE_APPROVED=1'; then
+    has_approval=1
+fi
+
+# Block broad local destructive operations unless the user/operator made
+# approval explicit in the command.
+if [ "$has_approval" -ne 1 ] && echo "$COMMAND" | grep -qE '(^|[;&|[:space:]])rm[[:space:]]+-[A-Za-z]*r[fA-Za-z]*[[:space:]]+(\.|/|\*|\$PWD|\$\{PWD\}|[^|;&]*(/|^)(global|per-repo|templates|tests|src|app|lib|packages|services)(/|[[:space:]]|$))'; then
+    echo "BLOCKED: destructive rm requires explicit approval marker --destructive-approved." >&2
+    exit 2
+fi
+if [ "$has_approval" -ne 1 ] && echo "$COMMAND" | grep -qE 'git[[:space:]]+(clean[[:space:]]+-f[dx]*|reset[[:space:]]+--hard|checkout[[:space:]]+--[[:space:]]+\.|restore[[:space:]].*--source|filter-branch|filter-repo)'; then
+    echo "BLOCKED: destructive git command requires explicit approval marker --destructive-approved." >&2
+    exit 2
+fi
+if [ "$has_approval" -ne 1 ] && echo "$COMMAND" | grep -qiE '\b(psql|mysql|clickhouse-client)\b[^|;&]*\b(drop[[:space:]]+(table|database|schema)|truncate[[:space:]]+table|delete[[:space:]]+from[[:space:]]+[A-Za-z0-9_."]+[[:space:]]*($|;))'; then
+    echo "BLOCKED: destructive database command requires explicit approval marker --destructive-approved." >&2
+    exit 2
+fi
+
 # Allow --force-with-lease (safe: rejects if remote changed)
 if echo "$COMMAND" | grep -qE 'git\s+push.*--force-with-lease'; then
     exit 0

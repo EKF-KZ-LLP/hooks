@@ -5,7 +5,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/global/ralph-loop-enforce.sh"
 VALIDATOR="$ROOT/global/ralph-loop-validate.py"
 GUARD="$ROOT/global/guard-no-tracker-overwrite.sh"
+SAFETY_GUARD="$ROOT/global/guard-no-force-push.sh"
 HOOK03="$ROOT/per-repo/ralph-loop/03-plan-tracker-edit-guard.sh"
+MERGE_GATE="$ROOT/per-repo/ralph-loop/04-gh-pr-merge-gate.sh"
+PREF_HELPER="$ROOT/global/record-pre-fix-failing-test.sh"
 
 pass=0
 fail=0
@@ -128,6 +131,11 @@ print(json.dumps({
     },
 }))
 PY
+}
+
+invoke_edit_file() {
+  local repo="$1" file="$2" content="$3"
+  invoke_write "$repo" "$file" "$content"
 }
 
 expect_block() {
@@ -292,6 +300,99 @@ PY
 ' "$repo" "$HOOK03"
 }
 
+test_handoff_attempt_history_deletion() {
+  local repo old new
+  repo="$(make_repo)"
+  write_handoff_attempts "$repo" TASK-001 2 no yes yes
+  old="$(cat "$repo/HANDOFF.md")"
+  new="$(printf '%s\n' "$old" | awk 'BEGIN{drop=0} /^- attempt: 2/{drop=1} drop && /^- attempt: 3/{drop=0} !drop{print}')"
+  expect_block "HANDOFF attempt history deletion" invoke_write "$repo" "$repo/HANDOFF.md" "$new"
+}
+
+test_touch_workplan_freshness_forgery() {
+  local repo payload
+  repo="$(make_repo)"
+  payload="{\"tool_input\":{\"command\":\"touch $repo/WORKPLAN.md\"}}"
+  expect_block "touch WORKPLAN freshness forgery" bash -c "printf '%s' '$payload' | bash '$GUARD'"
+}
+
+test_source_edit_without_active_plan() {
+  local repo
+  repo="$(make_repo)"
+  expect_block "source edit without active TASK-ID" invoke_edit_file "$repo" "$repo/src/app.py" 'print("changed")'
+}
+
+test_behavior_code_without_prefix_test() {
+  local repo plan
+  repo="$(make_repo)"
+  plan="$(task_block " " in_progress pending code)"
+  printf '%s\n' "$plan" > "$repo/WORKPLAN.md"
+  cat >> "$repo/HANDOFF.md" <<EOF
+plan_vs_code_check: TASK-001
+files: src/app.py
+mismatch: none
+decision: proceed
+EOF
+  expect_block "behavior code without pre-fix failing test" invoke_edit_file "$repo" "$repo/src/app.py" 'print("changed")'
+}
+
+test_failed_verification_without_fresh_attempt() {
+  local repo payload
+  repo="$(make_repo)"
+  printf '%s\n' "$(task_block " " in_progress pending code)" > "$repo/WORKPLAN.md"
+  payload='{"tool_name":"Bash","tool_input":{"command":"pytest tests/test_app.py"},"tool_response":{"exit_code":1}}'
+  expect_block "failed verification without fresh attempt" bash -c "printf '%s' '$payload' | python3 '$VALIDATOR' posttool-failure --project '$repo'"
+}
+
+test_destructive_rm_without_approval() {
+  local repo payload
+  repo="$(make_repo)"
+  payload="{\"tool_input\":{\"command\":\"rm -rf $repo/src\"}}"
+  expect_block "destructive rm without approval" bash -c "printf '%s' '$payload' | bash '$SAFETY_GUARD'"
+}
+
+test_pr_head_mismatch_blocks_merge() {
+  local repo fakebin local_sha pr_sha ev
+  repo="$(make_repo)"
+  local_sha="$(head_sha "$repo")"
+  pr_sha="1111111111111111111111111111111111111111"
+  mkdir -p "$repo/.checkpoints/TASK-001" "$repo/.claude"
+  ev="$repo/.checkpoints/TASK-001/evidence.md"
+  cat > "$ev" <<EOF
+Verdict: PASS
+Command: review
+Result: PASS
+Commit: $local_sha
+Review-scope: full-code-path
+Diff-only: false
+Senior review full-code-path
+EOF
+  cat > "$repo/tracker.md" <<EOF
+- [x] PR #1 pr-1-merged evidence: .checkpoints/TASK-001/evidence.md
+EOF
+  printf '%s\n' "$repo/tracker.md" > "$repo/.claude/active-tracker"
+  fakebin="$repo/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/gh" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  "pr checks 1 --required") exit 0 ;;
+  *"reviewDecision,reviewRequests"*) printf '{"reviewDecision":"APPROVED","reviewRequests":[]}\n'; exit 0 ;;
+  *"statusCheckRollup"*) printf '{"statusCheckRollup":[]}\n'; exit 0 ;;
+  *"headRefOid"*) printf '%s\n' "$pr_sha"; exit 0 ;;
+  *) exit 0 ;;
+esac
+EOF
+  chmod +x "$fakebin/gh"
+  expect_block "PR head mismatch review evidence" env PATH="$fakebin:$PATH" bash -c "cd '$repo' && printf '%s' '{\"tool_input\":{\"command\":\"gh pr merge 1\"}}' | bash '$MERGE_GATE'"
+}
+
+test_prefix_helper_rejects_passing_test() {
+  local repo
+  repo="$(make_repo)"
+  expect_block "pre-fix helper rejects passing command" bash -c "cd '$repo' && '$PREF_HELPER' TASK-001 -- true"
+}
+
 test_blocked_without_attempt
 test_failed_after_one_attempt
 test_duplicate_attempts
@@ -306,6 +407,14 @@ test_codex_not_rescue
 test_review_old_sha
 test_skip_reason_direct_bash
 test_skip_reason_write_tool
+test_handoff_attempt_history_deletion
+test_touch_workplan_freshness_forgery
+test_source_edit_without_active_plan
+test_behavior_code_without_prefix_test
+test_failed_verification_without_fresh_attempt
+test_destructive_rm_without_approval
+test_pr_head_mismatch_blocks_merge
+test_prefix_helper_rejects_passing_test
 
 note "negative tests passed: $pass"
 if [ "$fail" -ne 0 ]; then

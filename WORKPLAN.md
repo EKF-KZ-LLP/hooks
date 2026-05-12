@@ -4,7 +4,8 @@
 - User request dated 2026-05-12: hard audit of universal hooks and enforcement for the 35 critical gates.
 - Repository source: `/Users/antonsahovskii/Dev/Hooks`.
 - Project docs: `README.md`, `SETUP-PROMPT.md`, `templates/task-spec.md`, `global/*`, `per-repo/ralph-loop/*`.
-- No local `AGENTS.md` and no `.git` directory found in this repository. Git/SHA enforcement must be implemented for target repositories where git exists and tested with synthetic fixtures.
+- No local `AGENTS.md` in this repository. Local git exists on branch `main`; remote `origin` points to `https://github.com/EKF-KZ-LLP/hooks.git`.
+- Remote GitHub repository is reachable, but it has no refs, PRs or workflow runs visible from this working copy during the repeat audit. Remote-only CI/CodeQL/review behavior is therefore tested by fail-closed mocks and left as a live-PR residual risk.
 
 ## Readiness Criteria
 - All BLOCKING/HIGH gaps found in the 35 gates are fixed in hooks or tests.
@@ -95,3 +96,45 @@
 - Final local checks passed before commit. Remote CI/CodeQL/review was not run because this repository has no remote PR.
 - Implementation commit recorded locally as `b99329f`; a final handoff-only commit may follow.
 - Final validator tightening added Senior/Codex review and stack-check requirements for done tasks.
+- Repeat audit started after GitHub repository creation request.
+- Current local repository now has `.git`; `origin` was not configured at repeat-audit start.
+- Repeat audit must preserve existing uncommitted edits in `global/04-gh-pr-merge-gate.sh` and `per-repo/ralph-loop/04-gh-pr-merge-gate.sh` unless they are proven unsafe and replaced intentionally.
+- Repeat audit found HIGH gaps in post-failure hook coverage, HANDOFF attempt deletion, behavior-code pre-fix evidence production, PR HEAD review freshness, destructive local actions and tracker timestamp forgery. All were fixed locally and covered by negative tests.
+
+## Repeat Audit Tasks
+
+- [ ] TASK-007: Repeat 35-gate hard audit against local and GitHub-ready repo
+  - type: discovery
+  - required: true
+  - scope: `global/`, `per-repo/ralph-loop/`, `tests/`, git remote config
+  - source_of_truth: user repeat-audit request and current HEAD
+  - success_criteria: 35 gates have fresh verdicts and all BLOCKING/HIGH gaps are fixed or explicitly remote-only
+  - verification: code audit, git/remote inspection, local hook tests
+  - evidence: `HANDOFF.md`, `global/ralph-loop-validate.py`, `tests/negative-ralph-loop-enforcement.sh`
+  - result: Fresh audit completed. All local enforceable gates now map to hard blockers; remote live CI/CodeQL/review remains unproven without a real PR but local merge-gate mocks prove fail-closed and stale PR HEAD behavior.
+  - commit: pending-final-local-commit
+  - status: done
+
+- [ ] TASK-008: Prove remote/PR gate behavior as far as possible
+  - type: ci
+  - required: true
+  - scope: GitHub remote `https://github.com/EKF-KZ-LLP/hooks.git`, PR/merge hook behavior
+  - source_of_truth: GitHub remote state and merge gate code
+  - success_criteria: remote is configured and inspected; local fail-closed PR/merge tests cover no-PR paths; real PR-only residual risk is stated
+  - verification: `git remote`, `git ls-remote`, `gh`/git checks where available
+  - evidence: `git ls-remote origin`, `gh pr list`, `gh run list`, `tests/negative-ralph-loop-enforcement.sh`
+  - result: Remote `origin` was configured and inspected. GitHub repo is reachable but has no refs, PRs or runs. Added PR HEAD mismatch negative test so old review evidence cannot pass a merge gate.
+  - commit: pending-final-local-commit
+  - status: done
+
+- [ ] TASK-009: Update tests/docs if repeat audit finds gaps
+  - type: test
+  - required: true
+  - scope: negative tests and docs
+  - source_of_truth: repeat-audit gaps
+  - success_criteria: new bypasses are blocked by negative tests and docs match behavior
+  - verification: syntax checks, negative tests, git diff check
+  - evidence: `README.md`, `SETUP-PROMPT.md`, `global/record-pre-fix-failing-test.sh`, `per-repo/ralph-loop/15-post-verification-failure-gate.sh`, `tests/negative-ralph-loop-enforcement.sh`
+  - result: Added post-verification failure hook, pre-fix failing-test recorder, stricter PR evidence freshness, HANDOFF anti-deletion checks, destructive-action blocks and 8 new negative tests. Negative harness now reports 22 blocking tests.
+  - commit: pending-final-local-commit
+  - status: done
