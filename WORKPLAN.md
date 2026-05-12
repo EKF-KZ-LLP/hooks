@@ -93,3 +93,4 @@
 - Existing enforcement is split between per-repo hooks and `global/ralph-loop-enforce.sh`; audit must decide whether this is wired and sufficient.
 - Local git repository initialized; baseline commit is `6bb892e`. Remote CI, CodeQL and PR review gates still require a real PR to verify end to end, while local tests will cover fail-closed and stale-SHA logic.
 - Final local checks passed before commit. Remote CI/CodeQL/review was not run because this repository has no remote PR.
+- Implementation commit recorded locally as `b99329f`; a final handoff-only commit may follow.

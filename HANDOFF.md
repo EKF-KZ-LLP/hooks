@@ -71,7 +71,7 @@
   result: All syntax/style checks passed; negative tests report `negative tests passed: 14`.
   next_decision: final report
   evidence: `tests/negative-ralph-loop-enforcement.sh`
-  commit: pending-final-local-commit
+  commit: b99329f
   timestamp: 2026-05-12T00:00:00+03:00
 
 ## Gate Audit Draft
