@@ -207,6 +207,30 @@
   commit: pending-optional-guards-commit
   timestamp: 2026-05-12T11:00:57+03:00
 
+- attempt: 17
+  task_id: TASK-014
+  trigger: other
+  hypothesis: Optional guard enforcement is not complete until the pushed commit passes server CI and CodeQL, because local harness output can be stale or omitted.
+  action: Pushed optional-guards commit to `origin/main`, verified GitHub `CI` and GitHub `CodeQL` on the exact pushed SHA.
+  command_or_artifact: `git push origin main`; `gh run list --repo EKF-KZ-LLP/hooks --limit 10 --json databaseId,workflowName,status,conclusion,headSha,createdAt`; `gh run watch 25721674661 --repo EKF-KZ-LLP/hooks --exit-status`
+  result: GitHub `CI` run `25721675120` success and GitHub `CodeQL` run `25721674661` success for commit `ef4b210de56143ac8412def8480d91b525e97067`.
+  next_decision: final optional-guards report
+  evidence: GitHub Actions run IDs `25721675120`, `25721674661`
+  commit: ef4b210de56143ac8412def8480d91b525e97067
+  timestamp: 2026-05-12T11:05:31+03:00
+
+- attempt: 18
+  task_id: TASK-014
+  trigger: test_failed
+  hypothesis: Final tracker update can leave the working tree in a different state than pushed HEAD, so optional guard tests must be rerun after local evidence edits.
+  action: Reran optional guard suite, found local guard drift that reintroduced old warning-only and fail-open behavior, reapplied the committed enforcement state with patches, and reran the optional suite in isolation.
+  command_or_artifact: `tests/optional-guards-enforcement.sh`; `git diff -- per-repo/optional-guards/assertion-change-guard.sh per-repo/optional-guards/test-data-guard.sh per-repo/optional-guards/test-quality-gate.sh per-repo/optional-guards/destructive-sql-guard.sh`
+  result: First final rerun failed 5 optional checks; after restoring the committed enforcement state, optional suite reports `optional guard tests passed: 8` and optional guard files have no diff from HEAD.
+  next_decision: run final full local checks and commit evidence metadata
+  evidence: `tests/optional-guards-enforcement.sh`
+  commit: ef4b210de56143ac8412def8480d91b525e97067
+  timestamp: 2026-05-12T11:11:32+03:00
+
 ## Gate Audit Draft
 - 35-gate audit completed. Gaps moved from PARTIAL/NO to enforced where local hook code can enforce them.
 - Repeat 35-gate audit completed after GitHub repo creation. Gaps moved from PARTIAL/NO to enforced where local hook code can enforce them.
@@ -234,6 +258,12 @@
 - `global/record-pre-fix-failing-test.sh`: helper that only writes pre-fix evidence when the command fails.
 - `per-repo/ralph-loop/15-post-verification-failure-gate.sh`: PostToolUse gate for failed verification commands.
 - `.github/workflows/ci.yml`: server CI for compile, shell syntax, whitespace, forbidden-symbol scan and negative enforcement tests.
+- `per-repo/optional-guards/assertion-change-guard.sh`: assertion-only test changes now hard block and no longer fail open through empty `diff.external`.
+- `per-repo/optional-guards/test-data-guard.sh`: fixture/assertion cross-file diff checks no longer fail open through empty `diff.external`.
+- `per-repo/optional-guards/test-quality-gate.sh`: Python trivial assertions are detected with stable patterns.
+- `per-repo/optional-guards/destructive-sql-guard.sh`: destructive SQL detector now blocks broader delete/truncate/drop/drop-column patterns.
+- `per-repo/optional-guards/graphify-hint.sh`: search command matching now catches commands that start with `rg`, `grep`, `find`, `fd`, `ack`, or `ag`.
+- `tests/optional-guards-enforcement.sh`: dedicated optional guard negative suite with 8 checks.
 
 ## Next Step
 - Commit final local changes. Push/open a real PR only when live GitHub CI, CodeQL and review gates must be exercised against server-side state.

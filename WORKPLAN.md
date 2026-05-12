@@ -201,7 +201,7 @@
   - source_of_truth: user request for optional-guards audit, negative tests and "подключать когда" table
   - success_criteria: every optional guard has a clear applicability rule, hard-block behavior, negative test or documented non-blocking status, and all BLOCKING/HIGH gaps fixed
   - verification: shell syntax, optional negative test harness, main negative harness, GitHub CI/CodeQL
-  - evidence: `tests/optional-guards-enforcement.sh`, `tests/negative-ralph-loop-enforcement.sh`, `README.md`, `SETUP-PROMPT.md`
-  - result: Optional guard audit found HIGH gaps in assertion-change hard blocking, diff fail-open paths, destructive SQL breadth, graphify command matching and missing dedicated negative tests. Fixed local hooks, added optional negative suite with 8 checks, added CI step and updated the "подключать когда" table.
-  - commit: pending-optional-guards-commit
-  - status: verified
+  - evidence: `tests/optional-guards-enforcement.sh`, `tests/negative-ralph-loop-enforcement.sh`, GitHub CI `25721675120`, GitHub CodeQL `25721674661`
+  - result: Optional guard audit found HIGH gaps in assertion-change hard blocking, diff fail-open paths, destructive SQL breadth, graphify command matching and missing dedicated negative tests. Fixed local hooks, added optional negative suite with 8 checks, added CI step and updated the "подключать когда" table. Local checks, GitHub CI and GitHub CodeQL passed on commit `ef4b210de56143ac8412def8480d91b525e97067`; final local rerun after tracker updates passed `optional guard tests passed: 8`.
+  - commit: ef4b210de56143ac8412def8480d91b525e97067
+  - status: done
