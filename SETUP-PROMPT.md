@@ -101,6 +101,9 @@ hooks и удалит дубли.
       должна создать `.checkpoints/TASK-001/pre-fix-failing-test.md`.
     - 15-post-verification-failure-gate:
       failed `pytest`/`lint` без свежего attempt в `HANDOFF.md` должен дать exit 2.
+    - 04-gh-pr-merge-gate:
+      GitHub pending human reviewer не должен блокировать при валидном Codex evidence;
+      merge без Codex evidence должен дать exit 2.
 12. Если есть per-repo Ralph Loop: создай <repo>/.claude/active-tracker
     с валидным `TASK-001` contract и `status: in_progress` - Stop должен exit 2.
 13. Если устанавливаешь из этого repo, запусти:

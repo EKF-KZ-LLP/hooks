@@ -177,3 +177,17 @@
   - result: Local checks pass, CI run is success, CodeQL runs are success. Final report can use hook/result/test table.
   - commit: 91f78ed765c995cb01b79c3e76172532c68c37c2
   - status: done
+
+## Codex Review Gate Update
+
+- [ ] TASK-013: Replace GitHub human review gate with Codex review gate
+  - type: code
+  - required: true
+  - scope: `global/04-gh-pr-merge-gate.sh`, `per-repo/ralph-loop/04-gh-pr-merge-gate.sh`, `tests/negative-ralph-loop-enforcement.sh`, docs
+  - source_of_truth: user clarification that GitHub human review is useless for a business owner and Codex review is the meaningful gate
+  - success_criteria: PR merge no longer blocks on GitHub `reviewDecision` or pending human reviewers, but still blocks without current Codex review evidence from Claude Code plugin + `codex:rescue`
+  - verification: local negative/allow tests plus GitHub CI
+  - evidence: `global/04-gh-pr-merge-gate.sh`, `per-repo/ralph-loop/04-gh-pr-merge-gate.sh`, `tests/negative-ralph-loop-enforcement.sh`
+  - result: PR merge gate now treats GitHub human review as informational and requires current Codex review evidence with Claude Code plugin, `codex:rescue`, `codex:codex-rescue`, `AGENTS.md`, `verbatim`, `full-code-path`, `Command`, `Result` and current commit. Negative tests now include "merge without Codex evidence" block and "pending GitHub human review allowed with Codex evidence" allow.
+  - commit: pending-codex-gate-commit
+  - status: done

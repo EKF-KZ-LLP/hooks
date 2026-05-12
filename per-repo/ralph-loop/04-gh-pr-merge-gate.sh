@@ -8,12 +8,13 @@
 #
 #   GitHub gates:
 #     G9   CI required checks green (`gh pr checks --required`)
-#     G10  reviewDecision = APPROVED, no pending review requests
+#     G10  GitHub human review is informational; Codex evidence is mandatory
 #     G23  CodeQL check (if attached) = SUCCESS or NEUTRAL
 #     G24  Stale-SHA: reviewed commit is ancestor of HEAD
-#     GVerdict  At least one of: local tracker evidence with
-#               `Verdict: PASS`, OR docs/superpowers/reviews/*-pr<N>-*-codex.md
-#               with `Verdict: APPROVED`
+#     GVerdict  At least one current Codex review evidence with
+#               `Verdict: PASS/APPROVED`, Claude Code plugin,
+#               codex:rescue, codex:codex-rescue, AGENTS.md,
+#               verbatim and full-code-path.
 #
 #   GitLab gates:
 #     GVerdict  Local tracker evidence with `Verdict: PASS`, OR
@@ -200,7 +201,7 @@ if [ -z "$mr_num" ]; then
 fi
 
 # -----------------------------------------------------------
-# Codex/Senior verdict check (tracker + project review + server)
+# Codex verdict check (tracker + project review + server)
 # -----------------------------------------------------------
 local_pass=0
 project_pass=0
@@ -232,6 +233,22 @@ review_evidence_ok() {
     return 0
 }
 
+codex_evidence_ok() {
+    f="$1"
+    review_evidence_ok "$f" || return 1
+    grep -qiE 'codex' "$f" || return 1
+    grep -qiE 'Claude Code plugin' "$f" || return 1
+    grep -qiE 'codex:rescue' "$f" || return 1
+    grep -qiE 'codex:codex-rescue' "$f" || return 1
+    grep -qiE 'AGENTS\.md' "$f" || return 1
+    grep -qiE 'verbatim' "$f" || return 1
+    grep -qiE 'full-code-path' "$f" || return 1
+    if grep -qiE 'diff-only' "$f" && ! grep -qiE 'diff-only:[[:space:]]*false' "$f"; then
+        return 1
+    fi
+    return 0
+}
+
 active_pointer="$repo/.claude/active-tracker"
 if [ -f "$active_pointer" ]; then
     tracker=$(<"$active_pointer")
@@ -243,7 +260,7 @@ if [ -f "$active_pointer" ]; then
             evidence_rel=$(printf '%s' "$line" | grep -oE 'evidence:[[:space:]]*[^ ]+' | sed -E 's/^evidence:[[:space:]]*//' | head -1 || true)
             if [ -n "$evidence_rel" ]; then
                 evidence_abs="$repo/$evidence_rel"
-                if review_evidence_ok "$evidence_abs"; then
+                if codex_evidence_ok "$evidence_abs"; then
                     local_pass=1
                     accepted_evidence_files="$accepted_evidence_files
 $evidence_abs"
@@ -256,7 +273,7 @@ fi
 if [ -d "$repo/docs/superpowers/reviews" ]; then
     for f in "$repo"/docs/superpowers/reviews/*-pr"$mr_num"-*-codex.md "$repo"/docs/superpowers/reviews/*-mr"$mr_num"-*-codex.md; do
         [ -f "$f" ] || continue
-        if review_evidence_ok "$f"; then
+        if codex_evidence_ok "$f"; then
             project_pass=1
             accepted_evidence_files="$accepted_evidence_files
 $f"
@@ -271,7 +288,7 @@ ev_dir_solo="$repo/.claude/evidence/PR-$mr_num"
 if [ -d "$ev_dir_solo" ]; then
     for codex_f in "$ev_dir_solo/codex-review.md" "$ev_dir_solo/codex-round2.md" "$ev_dir_solo/codex-round3.md"; do
         [ -f "$codex_f" ] || continue
-        if review_evidence_ok "$codex_f"; then
+        if codex_evidence_ok "$codex_f"; then
             solo_codex_file="$codex_f"
             break
         fi
@@ -280,28 +297,34 @@ if [ -d "$ev_dir_solo" ]; then
     if [ -f "$senior_f" ] && review_evidence_ok "$senior_f"; then
         solo_senior_file="$senior_f"
     fi
-    if [ -n "$solo_codex_file" ] && [ -n "$solo_senior_file" ]; then
+    if [ -n "$solo_codex_file" ]; then
         local_pass=1
         accepted_evidence_files="$accepted_evidence_files
 $solo_codex_file
-$solo_senior_file"
+"
     fi
 fi
 
 if [ "$is_glab_merge" -eq 1 ] && command -v glab >/dev/null 2>&1; then
     notes=$(glab api "projects/$(glab repo view --output=json 2>/dev/null | jq -r '.path_with_namespace // empty' | sed 's|/|%2F|')/merge_requests/$mr_num/notes" 2>/dev/null || echo "[]")
-    if printf '%s' "$notes" | jq -r '.[].body // empty' 2>/dev/null | grep -qE '^Verdict:[[:space:]]*APPROVED\b'; then
+    if printf '%s' "$notes" | jq -r '.[].body // empty' 2>/dev/null \
+        | grep -qiE '^Verdict:[[:space:]]*APPROVED\b' \
+        && printf '%s' "$notes" | jq -r '.[].body // empty' 2>/dev/null | grep -qiE 'Claude Code plugin' \
+        && printf '%s' "$notes" | jq -r '.[].body // empty' 2>/dev/null | grep -qiE 'codex:rescue' \
+        && printf '%s' "$notes" | jq -r '.[].body // empty' 2>/dev/null | grep -qiE 'full-code-path'; then
         server_pass=1
     fi
 fi
 
 if [ "$local_pass" -ne 1 ] && [ "$server_pass" -ne 1 ] && [ "$project_pass" -ne 1 ]; then
     cat >&2 <<EOF
-::error::ralph-loop-04: $provider PR/MR #$mr_num merge BLOCKED - no Codex/Senior verdict evidence.
+::error::ralph-loop-04: $provider PR/MR #$mr_num merge BLOCKED - no valid Codex review evidence.
 Acceptable evidence (any one):
-  - tracker line referencing pr-${mr_num}-merged with evidence:<path>.md containing 'Verdict: PASS'
-  - docs/superpowers/reviews/*-pr${mr_num}-*-codex.md with 'Verdict: APPROVED'
-  - (GitLab only) MR note body with 'Verdict: APPROVED' from Codex
+  - tracker line referencing pr-${mr_num}-merged with evidence:<path>.md containing Codex Verdict: PASS
+  - docs/superpowers/reviews/*-pr${mr_num}-*-codex.md with Codex Verdict: APPROVED
+  - .claude/evidence/PR-${mr_num}/codex-review.md or codex-roundN.md
+
+Evidence must include: Claude Code plugin, codex:rescue, codex:codex-rescue, AGENTS.md, verbatim, full-code-path, Command, Result and current Commit.
 Bypass: --ralph-override (with explicit user authorisation).
 EOF
     exit 2
@@ -323,40 +346,14 @@ if [ "$is_gh_merge" -eq 1 ]; then
         exit 2
     fi
 
-    # G10: review approval.
-    #
-    # Solo+AI mode (non-team repos): accept Codex Verdict: PASS + Senior PASS
-    # evidence as authorization equivalent to human reviewDecision=APPROVED.
-    # This unblocks merges when the project owner is not a code reviewer.
-    #
-    # Required evidence (any one path) for solo-mode bypass:
-    #   - .claude/evidence/PR-<N>/codex-review.md   ends with `Verdict: PASS` OR `Recommendation: approve`
-    #   - .claude/evidence/PR-<N>/codex-round2.md   same shape
-    #   - .claude/evidence/PR-<N>/senior-review.md  ends with `Verdict: PASS` OR `Recommendation: approve`
-    #
-    # AT LEAST one Codex evidence AND one Senior evidence required, both PASS.
-    # Reviewers-pending GitHub list still respected: if maintainer requested
-    # explicit reviewers, those still gate (human override of solo mode).
+    # G10: GitHub human review is intentionally informational.
+    # The business owner is not a code reviewer. Technical review is enforced
+    # by the Codex evidence gate above; pending GitHub reviewers must not block.
     review_json=$(gh pr view "$mr_num" --json reviewDecision,reviewRequests 2>/dev/null || echo '{}')
     review_decision=$(printf '%s' "$review_json" | jq -r '.reviewDecision // ""' 2>/dev/null || true)
     pending_reviewers=$(printf '%s' "$review_json" | jq -r '.reviewRequests | length' 2>/dev/null || echo 0)
-
-    solo_codex_pass=0
-    solo_senior_pass=0
-    [ -n "$solo_codex_file" ] && solo_codex_pass=1
-    [ -n "$solo_senior_file" ] && solo_senior_pass=1
-
-    if [ "$review_decision" != "APPROVED" ]; then
-        if [ "$solo_codex_pass" -eq 1 ] && [ "$solo_senior_pass" -eq 1 ]; then
-            echo "::notice::ralph-loop-04: G10 solo-mode authorization (Codex PASS + Senior PASS evidence). Human reviewDecision='$review_decision' bypassed." >&2
-        else
-            echo "::error::ralph-loop-04: PR #$mr_num reviewDecision='$review_decision' (need APPROVED) AND solo-mode evidence missing (codex_pass=$solo_codex_pass, senior_pass=$solo_senior_pass). Expected at $ev_dir_solo/{codex-review,codex-round2,codex-round3}.md + senior-review.md with 'Verdict: PASS' or 'Recommendation: approve'." >&2
-            exit 2
-        fi
-    fi
-    if [ "${pending_reviewers:-0}" -gt 0 ]; then
-        echo "::error::ralph-loop-04: PR #$mr_num has $pending_reviewers pending review request(s) (G10). Even solo-mode does not bypass explicit reviewer assignments." >&2
-        exit 2
+    if [ "$review_decision" != "APPROVED" ] || [ "${pending_reviewers:-0}" -gt 0 ]; then
+        echo "::notice::ralph-loop-04: GitHub human review is informational only (reviewDecision='$review_decision', pending=$pending_reviewers). Codex review evidence is the enforced technical gate." >&2
     fi
 
     # G23: CodeQL state
@@ -386,7 +383,7 @@ EOF
         if [ -n "$missing_pr_head" ]; then
             echo "::error::ralph-loop-04: PR #$mr_num review evidence does not match PR HEAD:" >&2
             printf '%b\n' "$missing_pr_head" >&2
-            echo "Resolve: re-run Senior + codex:rescue review on current PR HEAD." >&2
+            echo "Resolve: re-run codex:rescue review on current PR HEAD." >&2
             exit 2
         fi
         ev_dir="$repo/.claude/evidence/PR-$mr_num"

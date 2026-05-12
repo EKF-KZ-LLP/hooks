@@ -159,6 +159,30 @@
   commit: 91f78ed765c995cb01b79c3e76172532c68c37c2
   timestamp: 2026-05-12T00:00:00+03:00
 
+- attempt: 13
+  task_id: TASK-013
+  trigger: other
+  hypothesis: GitHub human reviewDecision is not useful when the owner is a business requester; the merge gate should enforce Codex review evidence instead.
+  action: Inspect current PR merge gate and negative tests before changing review enforcement.
+  command_or_artifact: `git status --short --branch`; `sed -n '200,390p' per-repo/ralph-loop/04-gh-pr-merge-gate.sh`; `sed -n '340,480p' tests/negative-ralph-loop-enforcement.sh`
+  result: Current merge gate still blocks pending GitHub reviewers unless solo Codex plus Senior evidence exists. It must be changed to make GitHub human review informational and Codex review mandatory.
+  next_decision: update merge gates and tests
+  evidence: `WORKPLAN.md`
+  commit: c872605b531d7a57386fe8fc7a290a0cae1b4eb8
+  timestamp: 2026-05-12T00:00:00+03:00
+
+- attempt: 14
+  task_id: TASK-013
+  trigger: other
+  hypothesis: Codex-first merge enforcement should block missing Codex evidence while allowing pending GitHub human review when Codex evidence is valid.
+  action: Updated both PR merge gates, README, SETUP-PROMPT and negative tests; added allow-test for pending human reviewer with valid Codex evidence and block-test for merge without Codex evidence.
+  command_or_artifact: `cmp -s global/04-gh-pr-merge-gate.sh per-repo/ralph-loop/04-gh-pr-merge-gate.sh`; `python3 -m py_compile global/ralph-loop-validate.py`; `for f in $(rg --files -g '*.sh'); do bash -n "$f" || exit 1; done`; `git diff --check`; forbidden-symbol scan; `tests/negative-ralph-loop-enforcement.sh`
+  result: Merge gate files remain identical. Local syntax/style checks pass. Negative tests report `negative tests passed: 29`.
+  next_decision: commit, push and verify GitHub CI/CodeQL
+  evidence: `tests/negative-ralph-loop-enforcement.sh`
+  commit: pending-codex-gate-commit
+  timestamp: 2026-05-12T00:00:00+03:00
+
 ## Gate Audit Draft
 - 35-gate audit completed. Gaps moved from PARTIAL/NO to enforced where local hook code can enforce them.
 - Repeat 35-gate audit completed after GitHub repo creation. Gaps moved from PARTIAL/NO to enforced where local hook code can enforce them.

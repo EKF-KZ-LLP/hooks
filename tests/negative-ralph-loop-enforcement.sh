@@ -118,6 +118,8 @@ write_review_evidence() {
     if [ "$with_codex" = "yes" ]; then
       printf 'Codex-tool: Claude Code plugin + codex:rescue\n'
       printf 'Codex-subagent: codex:codex-rescue\n'
+      printf 'AGENTS.md: read\n'
+      printf 'Verbatim: preserved\n'
     fi
   } > "$file"
 }
@@ -156,6 +158,25 @@ expect_block() {
   else
     fail=$((fail + 1))
     note "FAIL no block: $name"
+  fi
+}
+
+expect_allow() {
+  local name="$1"
+  shift
+  local output status
+  set +e
+  output="$("$@" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    pass=$((pass + 1))
+    note "PASS allow: $name"
+    printf '%s\n' "$output" | head -3
+  else
+    fail=$((fail + 1))
+    note "FAIL unexpected block: $name"
+    printf '%s\n' "$output" | head -10
   fi
 }
 
@@ -413,7 +434,11 @@ Result: PASS
 Commit: $local_sha
 Review-scope: full-code-path
 Diff-only: false
-Senior review full-code-path
+Codex review full-code-path
+Codex-tool: Claude Code plugin + codex:rescue
+Codex-subagent: codex:codex-rescue
+AGENTS.md: read
+Verbatim: preserved
 EOF
   cat > "$repo/tracker.md" <<EOF
 - [x] PR #1 pr-1-merged evidence: .checkpoints/TASK-001/evidence.md
@@ -433,6 +458,76 @@ esac
 EOF
   chmod +x "$fakebin/gh"
   expect_block "PR head mismatch review evidence" env PATH="$fakebin:$PATH" bash -c "cd '$repo' && printf '%s' '{\"tool_input\":{\"command\":\"gh pr merge 1\"}}' | bash '$MERGE_GATE'"
+}
+
+test_merge_without_codex_evidence_blocks() {
+  local repo fakebin local_sha ev
+  repo="$(make_repo)"
+  local_sha="$(head_sha "$repo")"
+  mkdir -p "$repo/.checkpoints/TASK-001" "$repo/.claude"
+  ev="$repo/.checkpoints/TASK-001/evidence.md"
+  cat > "$ev" <<EOF
+Verdict: PASS
+Command: senior review
+Result: PASS
+Commit: $local_sha
+Review-scope: full-code-path
+Diff-only: false
+Senior review full-code-path
+EOF
+  cat > "$repo/tracker.md" <<EOF
+- [x] PR #1 pr-1-merged evidence: .checkpoints/TASK-001/evidence.md
+EOF
+  printf '%s\n' "$repo/tracker.md" > "$repo/.claude/active-tracker"
+  fakebin="$repo/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/gh" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  *) exit 0 ;;
+esac
+EOF
+  chmod +x "$fakebin/gh"
+  expect_block "merge without Codex evidence" env PATH="$fakebin:$PATH" bash -c "cd '$repo' && printf '%s' '{\"tool_input\":{\"command\":\"gh pr merge 1\"}}' | bash '$MERGE_GATE'"
+}
+
+test_pending_human_review_allowed_with_codex() {
+  local repo fakebin local_sha ev
+  repo="$(make_repo)"
+  local_sha="$(head_sha "$repo")"
+  mkdir -p "$repo/.checkpoints/TASK-001" "$repo/.claude"
+  ev="$repo/.checkpoints/TASK-001/evidence.md"
+  cat > "$ev" <<EOF
+Verdict: PASS
+Command: codex review
+Result: PASS
+Commit: $local_sha
+Review-scope: full-code-path
+Diff-only: false
+Codex review full-code-path
+Codex-tool: Claude Code plugin + codex:rescue
+Codex-subagent: codex:codex-rescue
+AGENTS.md: read
+Verbatim: preserved
+EOF
+  cat > "$repo/tracker.md" <<EOF
+- [x] PR #1 pr-1-merged evidence: .checkpoints/TASK-001/evidence.md
+EOF
+  printf '%s\n' "$repo/tracker.md" > "$repo/.claude/active-tracker"
+  fakebin="$repo/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/gh" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  "pr checks 1 --required") exit 0 ;;
+  *"reviewDecision,reviewRequests"*) printf '{"reviewDecision":"CHANGES_REQUESTED","reviewRequests":[{"login":"business-owner"}]}\n'; exit 0 ;;
+  *"statusCheckRollup"*) printf '{"statusCheckRollup":[{"name":"CodeQL","conclusion":"SUCCESS"}]}\n'; exit 0 ;;
+  *"headRefOid"*) printf '%s\n' "$local_sha"; exit 0 ;;
+  *) exit 0 ;;
+esac
+EOF
+  chmod +x "$fakebin/gh"
+  expect_allow "pending GitHub human review allowed with Codex evidence" env PATH="$fakebin:$PATH" bash -c "cd '$repo' && printf '%s' '{\"tool_input\":{\"command\":\"gh pr merge 1\"}}' | bash '$MERGE_GATE'"
 }
 
 test_prefix_helper_rejects_passing_test() {
@@ -467,6 +562,8 @@ test_session_start_invalid_tracker_contract
 test_secret_write_blocks
 test_destructive_rm_without_approval
 test_pr_head_mismatch_blocks_merge
+test_merge_without_codex_evidence_blocks
+test_pending_human_review_allowed_with_codex
 test_prefix_helper_rejects_passing_test
 
 note "negative tests passed: $pass"

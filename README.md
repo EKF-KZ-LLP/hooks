@@ -85,7 +85,7 @@
 | `01-session-start-load-context.sh` | SessionStart | Fail-closed без active tracker и checkbox-ов. Читает global rules + project CLAUDE.md + active tracker, пишет `<repo>/.claude/session-context-summary.md`. |
 | `02-user-prompt-pending-tasks.sh` | UserPromptSubmit | Инжектит `[PENDING TASKS: N]` + first open + escape `OVERRIDE: skip task <slug>` |
 | `03-plan-tracker-edit-guard.sh` | PreToolUse Edit\|Write | Anti-cheat: разрешает только `[ ] -> [x]` flip, не дает писать evidence/skip files напрямую, проверяет contract evidence block. |
-| `04-gh-pr-merge-gate.sh` | PreToolUse Bash | `gh pr merge`, `glab mr merge`, direct API merge fail-closed без CI, approval, current-SHA review evidence и Codex/Senior verdict. |
+| `04-gh-pr-merge-gate.sh` | PreToolUse Bash | `gh pr merge`, `glab mr merge`, direct API merge fail-closed без CI, CodeQL и current-SHA Codex review evidence. GitHub human review только informational, потому что бизнес-заказчик не code reviewer. |
 | `05-stop-open-tasks-gate.sh` | Stop\|SubagentStop | Вызывает общий validator: DONE blocked при open required TASK-ID, blocked/failed без true blocker, stale WORKPLAN/HANDOFF, invalid evidence. |
 | `06-gh-pr-create-title-gate.sh` | PreToolUse Bash | `gh pr create --title` fuzzy-match со slug задачи (SequenceMatcher ratio ≥ 0.8) |
 | `07-gh-pr-create-iteration-gate.sh` | PreToolUse Bash | Iter-counter; ≥3 → forced SKIP path (skip-reason.md + `[x] [SKIP]`) |
