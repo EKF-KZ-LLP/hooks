@@ -68,7 +68,7 @@ extract_evidence() {
   # the file to:
   #   1. Exist after verify command finishes.
   #   2. Contain literal 'Verdict: PASS' line.
-  #   3. Be chmod 0444 (read-only — anti-tamper).
+  #   3. Be chmod 0444 (read-only - anti-tamper).
   #   4. Have mtime >= run-epoch (created or refreshed in this session).
   local target="$1"
   awk -v target="$target" '
@@ -105,13 +105,13 @@ check_evidence() {
   local perms
   perms="$(stat -f '%Lp' "$abs" 2>/dev/null || stat -c '%a' "$abs" 2>/dev/null || echo unknown)"
   if [[ "$perms" != "444" ]]; then
-    deny "evidence file $evidence_rel must be chmod 0444 (got $perms) — anti-tamper. Run: chmod 444 $evidence_rel"
+    deny "evidence file $evidence_rel must be chmod 0444 (got $perms) - anti-tamper. Run: chmod 444 $evidence_rel"
   fi
   if [[ "$run_epoch" != "0" ]]; then
     local mtime
     mtime="$(stat -f '%m' "$abs" 2>/dev/null || stat -c '%Y' "$abs" 2>/dev/null || echo 0)"
     if [[ "$mtime" -lt "$run_epoch" ]]; then
-      deny "evidence file $evidence_rel mtime ($mtime) is older than run-epoch ($run_epoch) — file pre-exists this session, regenerate."
+      deny "evidence file $evidence_rel mtime ($mtime) is older than run-epoch ($run_epoch) - file pre-exists this session, regenerate."
     fi
   fi
 }
@@ -169,7 +169,7 @@ case "$TOOL_NAME" in
     # Capture the plan content to .evidence/plans/exitplanmode-<ts>.md so
     # Ralph Loop has an audit record even if the plan was never accepted.
     #
-    # Hard-gate (Codex round 5): EVERY failure path must deny — silent loss
+    # Hard-gate (Codex round 5): EVERY failure path must deny - silent loss
     # would let plan-mode bypass tracking entirely.
     PLAN_TEXT="$(printf '%s' "$INPUT" | jq -r '.tool_input.plan // empty' 2>/dev/null || true)"
     if [[ -z "$PLAN_TEXT" ]]; then
@@ -179,7 +179,7 @@ case "$TOOL_NAME" in
     fi
     DUMP_DIR="$PROJECT_DIR/.evidence/plans"
     if ! mkdir -p "$DUMP_DIR" 2>/dev/null; then
-      deny "ExitPlanMode capture failed: cannot create $DUMP_DIR. Plan would be lost — fix permission/disk issue and retry."
+      deny "ExitPlanMode capture failed: cannot create $DUMP_DIR. Plan would be lost - fix permission/disk issue and retry."
     fi
     DUMP="$DUMP_DIR/exitplanmode-$(date +%Y%m%d-%H%M%S).md"
     if ! {
@@ -187,12 +187,12 @@ case "$TOOL_NAME" in
       printf '<!-- captured: %s -->\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       printf '%s\n' "$PLAN_TEXT"
     } >"$DUMP" 2>/dev/null; then
-      deny "ExitPlanMode capture failed: write to $DUMP errored. Plan would be lost — fix and retry."
+      deny "ExitPlanMode capture failed: write to $DUMP errored. Plan would be lost - fix and retry."
     fi
     if [[ ! -s "$DUMP" ]]; then
       deny "ExitPlanMode capture failed: $DUMP is empty after write. Plan would be lost."
     fi
-    # chmod 0444 immediately — agent (or future hook bug) cannot tamper after.
+    # chmod 0444 immediately - agent (or future hook bug) cannot tamper after.
     chmod 0444 "$DUMP" 2>/dev/null || true
     jq -n --arg dump "$DUMP" \
       '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",permissionDecisionReason:("Plan captured to " + $dump + " (chmod 0444). To track in Ralph Loop, copy items into .evidence/phase0-plan.md as `- [ ] **CODE: title**` blocks with verify: commands.")}}'
@@ -212,7 +212,7 @@ esac
 
 # --- Plan location guard: any new plan-like file MUST live in .evidence/ ---
 # Blocks creating .md files matching '*plan*.md' / '*roadmap*.md' / '*tracker*.md'
-# outside .evidence/ — forces plan mode artifacts into the canonical bucket
+# outside .evidence/ - forces plan mode artifacts into the canonical bucket
 # that this hook (and stop.sh) actually monitor.
 case "$FILE_PATH" in
   *plan*.md|*roadmap*.md|*tracker*.md|*PLAN*.md|*ROADMAP*.md|*TRACKER*.md)
@@ -244,9 +244,9 @@ trap cleanup EXIT
 #
 # Match key = STABLE item code (e.g. 'C-5', 'B-1') extracted from the bold
 # prefix `**<CODE>:`. Matching the FULL line was bypassable: rename text +
-# flip checkbox в одном Edit/Write — no match. Item code is invariant
+# flip checkbox в одном Edit/Write - no match. Item code is invariant
 # unless the entire row is removed/renamed (which is renaming completion,
-# not bypass — Codex round 3 closure).
+# not bypass - Codex round 3 closure).
 #
 # Algorithm:
 #   1. Pass NEW: collect codes of all `[x]` lines whose item code matches.
@@ -302,7 +302,7 @@ case "$TOOL_NAME" in
     ;;
   Write)
     # Write replaces the whole file. Compare current on-disk content vs incoming
-    # content — anything flipped from [ ] to [x] needs verify.
+    # content - anything flipped from [ ] to [x] needs verify.
     NEW_CONTENT="$(printf '%s' "$INPUT" | jq -r '.tool_input.content // empty' 2>/dev/null || true)"
     OLD_CONTENT=""
     if [[ -f "$FILE_PATH" ]]; then

@@ -3,8 +3,8 @@
 # Works on ALL projects + ALL 3 mutation tools (Write/Edit/MultiEdit).
 #
 # Codex review fixes applied:
-#   round 7: read tool_input.{content,new_string,edits[].new_string} — covers Write/Edit/MultiEdit.
-#   round 8: ignore old_string in match — removal of existing secret allowed.
+#   round 7: read tool_input.{content,new_string,edits[].new_string} - covers Write/Edit/MultiEdit.
+#   round 8: ignore old_string in match - removal of existing secret allowed.
 #   round 9: NEVER print matched-text in logs (even partial). Classifier-only.
 #            Whitelist env/template placeholders so $VAR / ${VAR} / {{x}} / <REPLACE_ME>
 #            / os.environ / process.env / getenv / infisical / vault are NOT blocked.
@@ -70,7 +70,7 @@ PATTERN_LIST=(
   'AWS Secret Access Key (40-char + context)|(aws[_-]?secret[_-]?access[_-]?key|aws[_-]?secret|AWS[_-]?SECRET)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+=]{40}["'"'"']?'
 )
 
-# Placeholder whitelist — ONLY STRUCTURAL env-ref / template markers.
+# Placeholder whitelist - ONLY STRUCTURAL env-ref / template markers.
 # Comment-marker keywords (TODO, CHANGEME, EXAMPLE, REDACTED, X-fill) are
 # DELIBERATELY EXCLUDED (Codex round 10): they can sit in a trailing
 # comment of a line that ALSO carries a real secret value, and previously
@@ -92,7 +92,7 @@ check_block() {
         re="${entry#*|}"
         # Get ALL matched lines, not just the first one. A multi-line
         # Write/Edit content can have placeholder pair на первой строке
-        # и real secret на второй — head -1 ловит только первую и пропускает
+        # и real secret на второй - head -1 ловит только первую и пропускает
         # secret (Codex round 13).
         hit_lines=$(echo "$blob" | grep -E "$re" 2>/dev/null)
         [ -n "$hit_lines" ] || continue
@@ -162,5 +162,5 @@ fi
 echo "::error::guard-no-secrets: hardcoded secret detected in ${TOOL:-Write/Edit/MultiEdit} NEW content." >&2
 echo "::error::Classifier: $new_classifier" >&2
 echo "Use env-vars (\$VAR / \${VAR}), templates ({{x}} / <REPLACE_ME>), os.environ / process.env / getenv, or Infisical/Vault. NEVER commit raw tokens." >&2
-echo "Note: removing an existing secret IS allowed — only adding/keeping one is blocked." >&2
+echo "Note: removing an existing secret IS allowed - only adding/keeping one is blocked." >&2
 exit 2

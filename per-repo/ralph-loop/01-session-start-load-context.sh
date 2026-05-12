@@ -17,19 +17,23 @@ repo=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 [ -n "$repo" ] || exit 0
 active_pointer="$repo/.claude/active-tracker"
 if [ ! -f "$active_pointer" ]; then
-    cat <<EOF
-[ralph-loop] no active plan tracker registered.
+    cat >&2 <<EOF
+::error::ralph-loop-01: no active plan tracker registered.
 Create one with:
   echo "$HOME/.claude/plans/<session>-tracker.md" > $active_pointer
   touch \$(cat $active_pointer)
 Then re-open the session.
 EOF
-    exit 0
+    exit 2
 fi
 
 tracker=$(<"$active_pointer")
 if [ ! -f "$tracker" ]; then
     echo "[ralph-loop] active tracker '$tracker' missing - cannot load plan." >&2
+    exit 2
+fi
+if ! grep -qE "^- \[[ xX~]\]" "$tracker" 2>/dev/null; then
+    echo "::error::ralph-loop-01: active tracker '$tracker' has zero checkbox tasks." >&2
     exit 2
 fi
 

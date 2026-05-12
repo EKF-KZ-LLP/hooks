@@ -22,8 +22,8 @@ fi
 # a stale leftover).
 plan_content=$(printf '%s' "$input" | jq -r '.tool_input.plan // .tool_input.content // ""' 2>/dev/null || true)
 if [ -z "$plan_content" ]; then
-    echo "[ralph-loop-08] ExitPlanMode tool_input has no plan content; refusing to guess by mtime. Active tracker unchanged." >&2
-    exit 0
+    echo "::error::ralph-loop-08: ExitPlanMode tool_input has no plan content; refusing to guess by mtime." >&2
+    exit 2
 fi
 
 # Canonicalise: strip leading/trailing whitespace + collapse to compute
@@ -62,8 +62,8 @@ if [ -n "$repo" ] && [ -d "$repo/.claude/plans" ]; then
 fi
 
 if [ "${#candidates[@]}" -eq 0 ]; then
-    echo "[ralph-loop-08] no plan file matches ExitPlanMode content hash $content_hash within last 5 min. Active tracker unchanged." >&2
-    exit 0
+    echo "::error::ralph-loop-08: no plan file matches ExitPlanMode content hash $content_hash within last 5 min." >&2
+    exit 2
 fi
 if [ "${#candidates[@]}" -gt 1 ]; then
     echo "::error::ralph-loop-08: ${#candidates[@]} plan files match content hash $content_hash; refusing to pick arbitrarily." >&2
@@ -102,9 +102,17 @@ fi
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 if [ -z "$repo" ]; then
-    echo "[ralph-loop-08] not in a git repo; skipping per-repo tracker registration." >&2
-    exit 0
+    echo "::error::ralph-loop-08: not in a git repo; cannot register a per-repo tracker." >&2
+    exit 2
 fi
+
+validator="${RALPH_GLOBAL_HOOKS_DIR:-$HOME/.claude/hooks}/ralph-loop-validate.py"
+if [ ! -x "$validator" ]; then
+    echo "::error::ralph-loop-08: missing Ralph Loop validator at '$validator'." >&2
+    echo "Install global hooks from /Users/antonsahovskii/Dev/Hooks/global before ExitPlanMode can pass." >&2
+    exit 2
+fi
+python3 "$validator" validate-file --project "$repo" --file "$plan"
 
 # Move the plan into the project so it lives under repo's git history
 # instead of leaking through the shared ~/.claude/plans/ space.

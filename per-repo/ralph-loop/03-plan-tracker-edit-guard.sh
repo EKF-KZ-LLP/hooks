@@ -27,7 +27,7 @@ file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/nu
 #   - evidence.md             → run-codex-review.sh
 #   - skip-reason.md          → hook 02 from user OVERRIDE prompt
 case "$file_path" in
-    *.checkpoints/*/evidence.md|*.checkpoints/*/codex-review-raw.txt|*.checkpoints/*/iteration-count)
+    *.checkpoints/*/evidence.md|*.checkpoints/*/attempt-*.md|*.checkpoints/*/pre-fix-failing-test.md|*.checkpoints/*/*review*.md|*.checkpoints/*/codex-review-raw.txt|*.checkpoints/*/iteration-count)
         echo "::error::ralph-loop-03: direct write to '$file_path' forbidden. Evidence is produced only by run-codex-review.sh." >&2
         exit 2
         ;;
@@ -79,8 +79,32 @@ if [ "$old_body" != "$new_body" ]; then
     exit 2
 fi
 
-# Extract evidence path from the line.
+# Extract evidence path from the line. New Task Evidence Contract stores
+# evidence in the metadata block below the checkbox, so fall back to the
+# simulated post-edit task block when the line has no inline marker.
 evidence_rel=$(printf '%s' "$new_string" | grep -oE 'evidence:[[:space:]]*[^ ]+' | sed -E 's/^evidence:[[:space:]]*//' | head -1)
+if [ -z "$evidence_rel" ]; then
+    task_id=$(printf '%s' "$new_string" | sed -nE 's/^- \[x\]( \[SKIP\])?[[:space:]]+(\*\*)?([A-Z][A-Z0-9]*-[0-9A-Z._-]+):.*/\3/p' | head -1)
+    if [ -n "$task_id" ]; then
+        post_text=$(python3 - "$tracker" "$old_string" "$new_string" <<'PYEOF'
+import sys
+path, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path).read()
+print(text.replace(old, new, 1), end="")
+PYEOF
+)
+        evidence_rel=$(printf '%s\n' "$post_text" | awk -v code="$task_id" '
+            $0 ~ "^- \\[x\\]( \\[SKIP\\])?[[:space:]]+(\\*\\*)?" code ":" {in_block=1; next}
+            in_block && /^- \[[ xX~]\]/ {exit}
+            in_block && /^[[:space:]]+-[[:space:]]+evidence:/ {
+                sub(/^[[:space:]]+-[[:space:]]+evidence:[[:space:]]*/, "")
+                gsub(/`/, "")
+                print
+                exit
+            }
+        ')
+    fi
+fi
 if [ -z "$evidence_rel" ]; then
     echo "::error::ralph-loop-03: tracker line missing 'evidence: <path>' marker." >&2
     exit 2
@@ -89,7 +113,7 @@ fi
 repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 evidence_abs="$repo/$evidence_rel"
 
-# SKIP path check. Hardened 2026-05-12 — closes agent self-SKIP cheat
+# SKIP path check. Hardened 2026-05-12 - closes agent self-SKIP cheat
 # vector. skip-reason.md must be authored by hook 02 (from user
 # OVERRIDE prompt), not by the agent via Write/Bash. Three checks:
 #   1. File exists.
@@ -107,7 +131,7 @@ if printf '%s' "$new_string" | grep -q '\[SKIP\]'; then
     fi
     perms=$(stat -f '%A' "$skip_file" 2>/dev/null || stat -c '%a' "$skip_file" 2>/dev/null || echo "")
     if [ "$perms" != "444" ]; then
-        echo "::error::ralph-loop-03: skip-reason '$skip_file' perms='$perms', expected 444 (immutable post-hook-02 write). Agent likely authored this file directly — cheat vector. Delete file and re-issue 'OVERRIDE: skip task <slug>'." >&2
+        echo "::error::ralph-loop-03: skip-reason '$skip_file' perms='$perms', expected 444 (immutable post-hook-02 write). Agent likely authored this file directly - cheat vector. Delete file and re-issue 'OVERRIDE: skip task <slug>'." >&2
         exit 2
     fi
     if ! grep -qE '^Author: user-override-hook02$' "$skip_file"; then

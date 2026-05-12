@@ -20,7 +20,7 @@ prompt=$(printf '%s' "$input" | jq -r '.prompt // ""' 2>/dev/null || true)
 repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 # OVERRIDE escape: only matches lines exactly starting with the marker.
-# Hardened 2026-05-12 — agent self-SKIP cheat vector closed by adding
+# Hardened 2026-05-12 - agent self-SKIP cheat vector closed by adding
 # tamper-proof author markers and chmod 444 on skip-reason.md. Hook 03
 # now refuses SKIP flip unless skip-reason.md was authored by THIS hook
 # (verified via Author + Override-prompt-hash + chmod 444).
@@ -46,7 +46,7 @@ Override-prompt-hash: $prompt_hash
 Override-prompt-excerpt: $(printf '%s' "$prompt" | head -c 200)
 Reason: user override via prompt
 EOF
-        # chmod 444 — agent cannot rewrite or post-hoc tamper.
+        # chmod 444 - agent cannot rewrite or post-hoc tamper.
         chmod 444 "$skip_file"
         # Append to audit log so OVERRIDE flow is auditable.
         audit_log="$HOME/.claude/audit.log"

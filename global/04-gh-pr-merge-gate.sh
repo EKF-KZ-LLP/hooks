@@ -109,6 +109,31 @@ fi
 local_pass=0
 project_pass=0
 server_pass=0
+current_sha=$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)
+
+review_evidence_ok() {
+    f="$1"
+    [ -f "$f" ] || return 1
+    grep -qE '^Verdict:[[:space:]]+(PASS|APPROVED)\b' "$f" || return 1
+    grep -qE '^(Command|Verify command|Verify|Test command|How verified):' "$f" || return 1
+    grep -qE '^(Result|Outcome|Logs|Output):' "$f" || return 1
+    grep -qE '^(Commit|SHA|Fix commit):' "$f" || return 1
+    if grep -qiE 'codex' "$f"; then
+        grep -qiE 'Claude Code plugin' "$f" || return 1
+        grep -qiE 'codex:rescue' "$f" || return 1
+        grep -qiE 'codex:codex-rescue' "$f" || return 1
+    fi
+    if grep -qiE 'review|codex|senior' "$f"; then
+        grep -qiE 'full-code-path' "$f" || return 1
+        if grep -qiE 'diff-only' "$f" && ! grep -qiE 'diff-only:[[:space:]]*false' "$f"; then
+            return 1
+        fi
+    fi
+    if [ -n "$current_sha" ] && ! grep -q "$current_sha" "$f"; then
+        return 1
+    fi
+    return 0
+}
 
 active_pointer="$repo/.claude/active-tracker"
 if [ -f "$active_pointer" ]; then
@@ -121,7 +146,7 @@ if [ -f "$active_pointer" ]; then
             evidence_rel=$(printf '%s' "$line" | grep -oE 'evidence:[[:space:]]*[^ ]+' | sed -E 's/^evidence:[[:space:]]*//' | head -1 || true)
             if [ -n "$evidence_rel" ]; then
                 evidence_abs="$repo/$evidence_rel"
-                if [ -f "$evidence_abs" ] && grep -qE '^Verdict:[[:space:]]+PASS([[:space:]]|$)' "$evidence_abs"; then
+                if review_evidence_ok "$evidence_abs"; then
                     local_pass=1
                 fi
             fi
@@ -132,7 +157,7 @@ fi
 if [ -d "$repo/docs/superpowers/reviews" ]; then
     for f in "$repo"/docs/superpowers/reviews/*-pr"$mr_num"-*-codex.md "$repo"/docs/superpowers/reviews/*-mr"$mr_num"-*-codex.md; do
         [ -f "$f" ] || continue
-        if grep -qE '^\*?\*?Verdict:?\*?\*?[[:space:]]+APPROVED\b' "$f"; then
+        if review_evidence_ok "$f"; then
             project_pass=1
             break
         fi

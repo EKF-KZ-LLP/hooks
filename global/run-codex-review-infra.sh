@@ -27,10 +27,16 @@ epoch=$(date -u +%s)
 run_id="codex-${epoch}-${slug}"
 sha=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 
-# Real Codex CLI invocation. Uses `codex exec` with explicit prompt that
-# requires literal `Verdict: PASS|FAIL` line in output. Falls back to
-# companion script if codex binary is unavailable.
-PROMPT_TEXT="Review commit ${sha} for task slug '${slug}'. Do NOT review only the diff - read full content of every file in the diff, then trace callers and verify tests cover the change end-to-end.
+# Real Codex invocation through the Claude Code Codex plugin companion,
+# the same runtime used by /codex:rescue and codex:codex-rescue.
+plugin_root="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/cache/openai-codex/codex/1.0.4}"
+companion="$plugin_root/scripts/codex-companion.mjs"
+if [ ! -x "$companion" ]; then
+    echo "::error::run-codex-review.sh: Claude Code Codex plugin companion not found at '$companion'. Run /codex:setup, then /codex:rescue." >&2
+    exit 2
+fi
+
+PROMPT_TEXT="Review commit ${sha} for task slug '${slug}'. This review is for Ralph Loop evidence and must be treated as coming from Claude Code plugin + codex:rescue / codex:codex-rescue. Do NOT review only the diff - read full content of every file in the diff, then trace callers and verify tests cover the change end-to-end.
 
 REQUIRED REVIEW STEPS (perform all):
 1. Read full content of each file changed in the diff (not just hunks).
@@ -54,7 +60,7 @@ Output format - file MUST contain these 5 sections in order:
 - ...
 
 ## Negative scenarios checked
-- <scenario name>: <test that covers it, or 'GAP — not covered'>
+- <scenario name>: <test that covers it, or 'GAP - not covered'>
 - ... (≥1 scenario explicitly mentioning empty/error/boundary/nil/null/edge)
 
 ## Plan-vs-code reconciliation
@@ -67,16 +73,9 @@ Verdict: PASS
 
 Use 'Verdict: FAIL' if any HIGH/BLOCKING issue OR if any of sections 1-4 cannot be filled (incomplete review = FAIL, not PASS-with-gaps)."
 
-if command -v codex >/dev/null 2>&1; then
-    codex exec --skip-git-repo-check --sandbox read-only "$PROMPT_TEXT" > "$raw" 2>&1 || true
-elif [ -x "$HOME/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs" ]; then
-    node "$HOME/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs" \
-        task --json --fresh --prompt "$PROMPT_TEXT" \
-        > "$raw" 2>&1 || true
-else
-    echo "::error::run-codex-review.sh: no Codex binary or companion found." >&2
-    exit 2
-fi
+prompt_file="$dir/codex-review-prompt.md"
+printf '%s\n' "$PROMPT_TEXT" > "$prompt_file"
+node "$companion" task --json --fresh --prompt-file "$prompt_file" > "$raw" 2>&1 || true
 
 verdict="UNKNOWN"
 if grep -qE '"verdict"[[:space:]]*:[[:space:]]*"PASS"' "$raw" 2>/dev/null; then
@@ -102,10 +101,19 @@ fi
 cat > "$evidence" <<EOF
 Task: $slug
 SHA: $sha
+Commit: $sha
 Codex-run-id: $run_id
+Codex-tool: Claude Code plugin + codex:rescue
+Codex-subagent: codex:codex-rescue
+Review-scope: full-code-path
+Diff-only: false
 Verdict: PASS
+Command: node "$companion" task --json --fresh --prompt-file "$prompt_file"
+Result: PASS
 Findings: $(grep -iE 'No blocking|no high|all clean' "$raw" | head -1 || echo "see raw")
 Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+$(cat "$raw")
 EOF
 
 # Set mtime to run epoch so hook 03 can compare.

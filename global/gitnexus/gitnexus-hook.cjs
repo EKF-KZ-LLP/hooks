@@ -2,9 +2,9 @@
 /**
  * GitNexus Claude Code Hook
  *
- * PreToolUse  — intercepts Grep/Glob/Bash searches and augments
+ * PreToolUse  - intercepts Grep/Glob/Bash searches and augments
  *               with graph context from the GitNexus index.
- * PostToolUse — detects stale index after git mutations and notifies
+ * PostToolUse - detects stale index after git mutations and notifies
  *               the agent to reindex.
  *
  * NOTE: SessionStart hooks are broken on Windows (Claude Code bug).
@@ -143,7 +143,7 @@ function runGitNexusCli(cliPath, args, cwd, timeout) {
 }
 
 /**
- * PreToolUse handler — augment searches with graph context.
+ * PreToolUse handler - augment searches with graph context.
  */
 function handlePreToolUse(input) {
   const cwd = input.cwd || process.cwd();
@@ -186,7 +186,7 @@ function sendHookResponse(hookEventName, message) {
 }
 
 /**
- * PostToolUse handler — detect index staleness after git mutations.
+ * PostToolUse handler - detect index staleness after git mutations.
  *
  * Instead of spawning a full `gitnexus analyze` synchronously (which blocks
  * the agent for up to 120s and risks KuzuDB corruption on timeout), we do a
@@ -210,7 +210,7 @@ function handlePostToolUse(input) {
   const gitNexusDir = findGitNexusDir(cwd);
   if (!gitNexusDir) return;
 
-  // Compare HEAD against last indexed commit — skip if unchanged
+  // Compare HEAD against last indexed commit - skip if unchanged
   let currentHead = '';
   try {
     const headResult = spawnSync('git', ['rev-parse', 'HEAD'], {
@@ -233,7 +233,7 @@ function handlePostToolUse(input) {
     lastCommit = meta.lastCommit || '';
     hadEmbeddings = meta.stats && meta.stats.embeddings > 0;
   } catch {
-    /* no meta — treat as stale */
+    /* no meta - treat as stale */
   }
 
   // If HEAD matches last indexed commit, no reindex needed

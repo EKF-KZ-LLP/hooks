@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# PSA test-data-guard — block modification of test fixtures that is NOT
+# PSA test-data-guard - block modification of test fixtures that is NOT
 # clearly justified by matching production changes in the same commit slice.
 #
-# Iron rule 22 (CLAUDE.md): fixture data is frozen — you do not re-shape it
+# Iron rule 22 (CLAUDE.md): fixture data is frozen - you do not re-shape it
 # to make a failing test pass. A legitimate fixture edit looks like one of:
 #   • fixture-only update (data refresh; no test file touched in the same slice)
 #   • fixture + production change (behavior change → new expected data)
@@ -52,7 +52,7 @@ $is_fixture || exit 0
 
 # Must be inside a git repo to reason about the slice
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
-  warn "not a git repo — skipping cross-file analysis for $FILE_PATH"
+  warn "not a git repo - skipping cross-file analysis for $FILE_PATH"
   exit 0
 fi
 
@@ -65,14 +65,14 @@ PROD_TOUCHED=$(printf '%s\n' "$CHANGED" \
   | grep -vE '(^testdata/|/testdata/|/__fixtures__/|/fixtures/|\.golden|\.md$|CONTEXT\.md|WORKPLAN\.md|HANDOFF\.md|CHANGELOG\.md)' || true)
 
 if [ -z "$TESTS_TOUCHED" ]; then
-  # Fixture-only update — legitimate (data refresh, e.g. from DWH). Pass.
+  # Fixture-only update - legitimate (data refresh, e.g. from DWH). Pass.
   exit 0
 fi
 
 # Tests touched alongside fixture. Now: was production code touched too?
 if [ -n "$PROD_TOUCHED" ]; then
-  # Behavior change path: fixture + prod + test — legitimate. Pass with note.
-  log "ℹ️  test-data-guard: fixture + production + tests edited together — ok ($FILE_PATH)."
+  # Behavior change path: fixture + prod + test - legitimate. Pass with note.
+  log "ℹ️  test-data-guard: fixture + production + tests edited together - ok ($FILE_PATH)."
   exit 0
 fi
 

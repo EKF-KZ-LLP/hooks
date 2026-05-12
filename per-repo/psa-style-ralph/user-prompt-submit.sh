@@ -7,7 +7,7 @@
 #   matching item as `[~] (skipped: <reason>)` so Stop hook stops
 #   counting it. Audit trail preserved in plan diff.
 #
-# Exit always 0 — never block prompt submission.
+# Exit always 0 - never block prompt submission.
 set -uo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"

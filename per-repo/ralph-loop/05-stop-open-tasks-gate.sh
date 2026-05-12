@@ -14,6 +14,14 @@ set -euo pipefail
 repo=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 [ -n "$repo" ] || exit 0
 
+validator="${RALPH_GLOBAL_HOOKS_DIR:-$HOME/.claude/hooks}/ralph-loop-validate.py"
+if [ ! -x "$validator" ]; then
+    echo "::error::ralph-loop-05: missing Ralph Loop validator at '$validator'." >&2
+    echo "Install global hooks from /Users/antonsahovskii/Dev/Hooks/global before Stop can pass." >&2
+    exit 2
+fi
+python3 "$validator" stop --project "$repo"
+
 override_marker="$repo/.claude/.allow-stop"
 [ -f "$override_marker" ] && exit 0
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PSA assertion-change-guard — when an assertion line is changed, require that
+# PSA assertion-change-guard - when an assertion line is changed, require that
 # either (a) production code is also changed in the same slice, or (b) the edit
 # adds a wholly new test case (new func Test…/it(…)/def test_…), or (c) the
 # commit slice contains an explicit testcase-id reference in the diff.
@@ -83,13 +83,13 @@ log "│   (a) changing production code in the same slice,"
 log "│   (b) adding a new test function (new case), or"
 log "│   (c) referencing a testcase id / issue (TC-XXX or Fixes #N) in the diff."
 log "│"
-log "│ Iron rule 21 (CLAUDE.md): a red test is information — don't silence it"
+log "│ Iron rule 21 (CLAUDE.md): a red test is information - don't silence it"
 log "│ by editing the expectation. Verify against the testcase spec first."
 log "│ If the test was genuinely wrong, add the testcase-id reference in the"
 log "│ diff (a comment in the test or in your next commit message)."
 log "│"
 log "│ Changed assertion lines:"
 printf '%s\n' "$ASSERT_DIFF" | head -6 | awk '{ print "│   " $0 }' >&2
-log "└─ (warning only — continuing)"
+log "└─ (warning only - continuing)"
 
 exit 0

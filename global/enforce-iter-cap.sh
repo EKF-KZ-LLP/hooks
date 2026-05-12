@@ -13,7 +13,7 @@ if ! printf '%s' "$cmd" | grep -qE 'gh\s+pr\s+(merge|create)|gh\s+api\s+[^|;&]*(
     exit 0
 fi
 
-# Block `gh pr merge --admin` outright — it bypasses required status
+# Block `gh pr merge --admin` outright - it bypasses required status
 # checks server-side. The agent must not use admin override; if checks
 # aren't green, fix them or escalate to the human operator. --admin
 # is NOT a valid bypass for the iteration cap below.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PSA test-quality-gate — static checks a test file after Edit/Write/MultiEdit.
+# PSA test-quality-gate - static checks a test file after Edit/Write/MultiEdit.
 #
 # Fails (exit 2 → blocking) on:
 #   T1 Trivial assertion     assert.True(t, true), assert True, expect(true).toBe(true), assert 1 == 1
@@ -110,7 +110,7 @@ case "$LANG" in
       violations+=("T3 assert-on-nothing: only toBeDefined/toBeUndefined checks, no value assertions")
     fi ;;
   py)
-    # No convenient Python pattern — skip (pytest raises on exception anyway).
+    # No convenient Python pattern - skip (pytest raises on exception anyway).
     : ;;
 esac
 
@@ -126,7 +126,7 @@ case "$LANG" in
     SUT_CALLS=${SUT_CALLS:-0}
     if [ "$MOCK_ASSERTS" -gt 0 ] && [ "$SUT_CALLS" -le "$MOCK_ASSERTS" ]; then
       # Only warn, not block (hard to detect perfectly without AST)
-      warn "possible T4 mock-only test — ${MOCK_ASSERTS} mock assertions, ${SUT_CALLS} SUT-like calls in $FILE_PATH"
+      warn "possible T4 mock-only test - ${MOCK_ASSERTS} mock assertions, ${SUT_CALLS} SUT-like calls in $FILE_PATH"
     fi ;;
   ts)
     MOCK_ASSERTS=$(grep -cE 'toHaveBeenCalled|toHaveBeenCalledWith|toHaveBeenCalledTimes' "$FILE_PATH" || true)
@@ -169,7 +169,7 @@ esac
 if [ "$NONBLANK" -gt 40 ] && [ "$ASSERT_COUNT" -gt 0 ]; then
   RATIO=$(( NONBLANK / ASSERT_COUNT ))
   if [ "$RATIO" -gt 20 ]; then
-    warn "low assertion density — ${ASSERT_COUNT} asserts / ${NONBLANK} non-blank lines (1 per ${RATIO}, target ≤ 20) in $FILE_PATH"
+    warn "low assertion density - ${ASSERT_COUNT} asserts / ${NONBLANK} non-blank lines (1 per ${RATIO}, target ≤ 20) in $FILE_PATH"
   fi
 fi
 

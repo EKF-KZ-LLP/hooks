@@ -42,7 +42,7 @@ last=$(gh run list --workflow build-deploy.yml --limit 1 \
     | jq -r '.[0] | "\(.status)|\(.conclusion // "")|\(.databaseId)|\(.createdAt)"' 2>/dev/null || echo "")
 
 if [ -z "$last" ] || [ "$last" = "null|null|null|null" ]; then
-    echo "[ralph-loop-13] no build-deploy.yml runs found yet — allowing stop." >&2
+    echo "[ralph-loop-13] no build-deploy.yml runs found yet - allowing stop." >&2
     exit 0
 fi
 

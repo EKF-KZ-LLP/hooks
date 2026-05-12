@@ -19,6 +19,14 @@ active_pointer="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/active-trac
 [ -f "$active_pointer" ] || exit 0
 tracker=$(<"$active_pointer")
 [ -f "$tracker" ] || exit 0
+repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+validator="${RALPH_GLOBAL_HOOKS_DIR:-$HOME/.claude/hooks}/ralph-loop-validate.py"
+if [ ! -x "$validator" ]; then
+    echo "::error::ralph-loop-09: missing Ralph Loop validator at '$validator'." >&2
+    echo "Install global hooks from /Users/antonsahovskii/Dev/Hooks/global before START TASK can pass." >&2
+    exit 2
+fi
+python3 "$validator" validate-file --project "$repo" --file "$tracker"
 
 input=$(cat)
 prompt=$(printf '%s' "$input" | jq -r '.prompt // ""' 2>/dev/null || true)
@@ -27,7 +35,6 @@ prompt=$(printf '%s' "$input" | jq -r '.prompt // ""' 2>/dev/null || true)
 slug=$(printf '%s' "$prompt" | grep -ioE '^(START|RESUME)[[:space:]]+TASK[[:space:]]+[a-z0-9-]+' | head -1 | awk '{print tolower($NF)}' || true)
 [ -n "$slug" ] || exit 0
 
-repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 spec="$repo/.checkpoints/$slug/task-spec.md"
 
 if [ ! -f "$spec" ]; then
