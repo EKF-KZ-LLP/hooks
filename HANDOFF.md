@@ -177,10 +177,10 @@
   hypothesis: Codex-first merge enforcement should block missing Codex evidence while allowing pending GitHub human review when Codex evidence is valid.
   action: Updated both PR merge gates, README, SETUP-PROMPT and negative tests; added allow-test for pending human reviewer with valid Codex evidence and block-test for merge without Codex evidence.
   command_or_artifact: `cmp -s global/04-gh-pr-merge-gate.sh per-repo/ralph-loop/04-gh-pr-merge-gate.sh`; `python3 -m py_compile global/ralph-loop-validate.py`; `for f in $(rg --files -g '*.sh'); do bash -n "$f" || exit 1; done`; `git diff --check`; forbidden-symbol scan; `tests/negative-ralph-loop-enforcement.sh`
-  result: Merge gate files remain identical. Local syntax/style checks pass. Negative tests report `negative tests passed: 29`.
-  next_decision: commit, push and verify GitHub CI/CodeQL
+  result: Merge gate files remain identical. Local syntax/style checks pass. Negative tests report `negative tests passed: 29`. GitHub CI `25718309366` and CodeQL `25718309104` passed for code commit `48aeb27553460d4a3c361614e70fee2c800f80c3`.
+  next_decision: final report
   evidence: `tests/negative-ralph-loop-enforcement.sh`
-  commit: pending-codex-gate-commit
+  commit: 48aeb27553460d4a3c361614e70fee2c800f80c3
   timestamp: 2026-05-12T00:00:00+03:00
 
 ## Gate Audit Draft
