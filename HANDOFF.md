@@ -74,6 +74,18 @@
   commit: b99329f
   timestamp: 2026-05-12T00:00:00+03:00
 
+- attempt: 6
+  task_id: TASK-006
+  trigger: other
+  hypothesis: DONE evidence still needed stricter proof for stack checks plus Senior and Codex review.
+  action: Tightened `global/ralph-loop-validate.py` so done tasks require Senior review PASS, Codex rescue markers, AGENTS.md, verbatim output and stack-specific test/lint/typecheck evidence where applicable.
+  command_or_artifact: `python3 -m py_compile global/ralph-loop-validate.py`; shell syntax loop; `git diff --check`; forbidden-symbol scan; `tests/negative-ralph-loop-enforcement.sh`
+  result: All checks passed again; negative tests still report `negative tests passed: 14`.
+  next_decision: final commit
+  evidence: `global/ralph-loop-validate.py`
+  commit: pending-final-local-commit
+  timestamp: 2026-05-12T00:00:00+03:00
+
 ## Gate Audit Draft
 - 35-gate audit completed. Gaps moved from PARTIAL/NO to enforced where local hook code can enforce them.
 - Remote-only gates for real CI, CodeQL and GitHub review approval still require a real PR to verify end to end. Local hooks fail closed or validate evidence shape, but cannot create GitHub server truth.

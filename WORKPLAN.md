@@ -94,3 +94,4 @@
 - Local git repository initialized; baseline commit is `6bb892e`. Remote CI, CodeQL and PR review gates still require a real PR to verify end to end, while local tests will cover fail-closed and stale-SHA logic.
 - Final local checks passed before commit. Remote CI/CodeQL/review was not run because this repository has no remote PR.
 - Implementation commit recorded locally as `b99329f`; a final handoff-only commit may follow.
+- Final validator tightening added Senior/Codex review and stack-check requirements for done tasks.

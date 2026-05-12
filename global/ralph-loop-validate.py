@@ -339,6 +339,59 @@ def validate_evidence(project: Path, task: Task, context: str = "task evidence")
     if "codex" in lowered:
         if "claude code plugin" not in lowered or "codex:rescue" not in lowered or "codex:codex-rescue" not in lowered:
             raise GateError(f"{task.task_id}: Codex evidence must come from Claude Code plugin + codex:rescue")
+        if "agents.md" not in lowered:
+            raise GateError(f"{task.task_id}: Codex evidence must prove AGENTS.md was read")
+        if "verbatim" not in lowered:
+            raise GateError(f"{task.task_id}: Codex evidence must preserve verbatim review output")
+
+    if task.checked and task.status == "done" and task.required:
+        if not re.search(r"(Senior-review:\s*PASS|Senior Engineer[^\n]*PASS)", evidence_text, re.I):
+            raise GateError(f"{task.task_id}: DONE requires Senior review PASS evidence")
+        if "full-code-path" not in lowered:
+            raise GateError(f"{task.task_id}: DONE requires full-code-path review evidence")
+        for token in ["claude code plugin", "codex:rescue", "codex:codex-rescue", "agents.md", "verbatim"]:
+            if token not in lowered:
+                raise GateError(f"{task.task_id}: DONE requires Codex review evidence with {token}")
+
+    for label, pattern in required_stack_checks(task):
+        if not re.search(pattern, lowered):
+            raise GateError(f"{task.task_id}: evidence missing required {label} check for touched stack")
+
+
+def required_stack_checks(task: Task) -> list[tuple[str, str]]:
+    text = f"{task.text}\n{task.meta.get('verification', '')}\n{task.meta.get('scope', '')}".lower()
+    if task.task_type not in {"code", "test", "ci"}:
+        return []
+    checks: list[tuple[str, str]] = []
+    if re.search(r"\.(ts|tsx|js|jsx)\b", text):
+        checks.extend(
+            [
+                ("tests", r"\b(test|jest|vitest|npm test|pnpm test|yarn test)\b"),
+                ("lint", r"\b(lint|eslint)\b"),
+                ("typecheck", r"\b(typecheck|tsc)\b"),
+            ]
+        )
+    elif re.search(r"\.py\b", text):
+        checks.extend(
+            [
+                ("tests", r"\b(test|pytest|unittest)\b"),
+                ("lint", r"\b(lint|ruff|flake8|pylint)\b"),
+            ]
+        )
+    elif re.search(r"\.go\b", text):
+        checks.extend(
+            [
+                ("tests", r"\bgo test\b"),
+                ("static analysis", r"\b(go vet|staticcheck|lint)\b"),
+            ]
+        )
+    else:
+        checks.append(("tests", r"\b(test|tests)\b"))
+    if "coverage" in text:
+        checks.append(("coverage", r"\bcoverage\b"))
+    if "ci" in text or ".github/workflows" in text:
+        checks.append(("CI", r"\bci\b"))
+    return checks
 
 
 def validate_task_contract(project: Path, text: str, *, closed_evidence: bool = True) -> list[Task]:
