@@ -472,6 +472,54 @@ EOF
   expect_block "code HEAD rejects first-parent evidence" python3 "$VALIDATOR" stop --project "$repo"
 }
 
+test_unrelated_code_change_does_not_stale_closed_task_evidence() {
+  local repo first evidence
+  repo="$(make_repo)"
+  mkdir -p "$repo/docs"
+  printf 'hook audit\n' > "$repo/docs/hook-audit.md"
+  git -C "$repo" add docs/hook-audit.md
+  git -C "$repo" commit -q -m "verified docs task"
+  first="$(head_sha "$repo")"
+
+  evidence="$repo/.checkpoints/TASK-001/evidence.md"
+  cat > "$evidence" <<EOF
+Command: local verify
+Command: rg TASK docs/hook-audit.md
+Result: PASS docs hook audit
+Commit: $first
+Senior Engineer PASS
+Review-scope: full-code-path
+Diff-only: false
+Claude Code plugin
+codex:rescue
+codex:codex-rescue
+AGENTS.md
+Verbatim output preserved
+EOF
+  cat > "$repo/WORKPLAN.md" <<EOF
+- [x] TASK-001: Docs scoped task
+  - type: docs
+  - required: true
+  - scope: docs/hook-audit.md
+  - source_of_truth: negative test
+  - success_criteria: unrelated later code changes do not stale this evidence
+  - verification: python3 ralph-loop-validate.py stop
+  - evidence: .checkpoints/TASK-001/evidence.md
+  - result: verified docs task before unrelated code change
+  - commit: $first
+  - status: done
+EOF
+  printf '# Handoff\n' > "$repo/HANDOFF.md"
+  printf '%s\n' "$repo/WORKPLAN.md" > "$repo/.claude/active-tracker"
+  git -C "$repo" add WORKPLAN.md HANDOFF.md .claude/active-tracker .checkpoints/TASK-001/evidence.md
+  git -C "$repo" commit -q -m "record docs evidence"
+  printf 'print("unrelated code")\n' > "$repo/src/app.py"
+  git -C "$repo" add src/app.py
+  git -C "$repo" commit -q -m "change unrelated code"
+
+  expect_allow "unrelated code change does not stale closed task evidence" python3 "$VALIDATOR" stop --project "$repo"
+}
+
 test_skip_reason_direct_bash() {
   local repo payload
   repo="$(make_repo)"
@@ -813,6 +861,7 @@ test_review_old_sha
 test_merge_head_accepts_first_parent_evidence
 test_metadata_head_accepts_first_parent_evidence
 test_code_head_rejects_first_parent_evidence
+test_unrelated_code_change_does_not_stale_closed_task_evidence
 test_skip_reason_direct_bash
 test_skip_reason_write_tool
 test_override_without_approval_ref_blocks

@@ -202,6 +202,29 @@ def git_changed_files(project: Path, base: str, head: str = "HEAD") -> list[str]
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
+def git_is_ancestor(project: Path, commit: str, head: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, head],
+            cwd=str(project),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def git_commit_distance(project: Path, base: str, head: str) -> int | None:
+    value = run(["git", "rev-list", "--count", f"{base}..{head}"], cwd=project)
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
 def is_metadata_only_path(rel: str) -> bool:
     return (
         rel in {"WORKPLAN.md", "HANDOFF.md", "DECISIONS.md"}
@@ -219,7 +242,37 @@ def head_is_metadata_only(project: Path, parent: str) -> bool:
     return bool(changed) and all(is_metadata_only_path(rel) for rel in changed)
 
 
-def head_matches_evidence(project: Path, head: str, evidence_commits: set[str]) -> bool:
+def nearest_evidence_ancestor(project: Path, head: str, evidence_commits: set[str]) -> str | None:
+    candidates: list[tuple[int, str]] = []
+    for commit in evidence_commits:
+        if not commit or not git_is_ancestor(project, commit, head):
+            continue
+        distance = git_commit_distance(project, commit, head)
+        if distance is not None:
+            candidates.append((distance, commit))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[0][1]
+
+
+def task_scope_unchanged_since(project: Path, task: Task, base: str, head: str) -> bool:
+    scope = clean_value(task.meta.get("scope", ""))
+    if not scope or not any(token in scope for token in ("/", ".")):
+        return False
+    changed = git_changed_files(project, base, head)
+    if not changed:
+        return True
+    for rel in changed:
+        if is_metadata_only_path(rel):
+            continue
+        path = project / rel
+        if rel in scope or path.name in scope:
+            return False
+    return True
+
+
+def head_matches_evidence(project: Path, head: str, evidence_commits: set[str], task: Task) -> bool:
     if not head:
         return True
     if head in evidence_commits:
@@ -233,7 +286,13 @@ def head_matches_evidence(project: Path, head: str, evidence_commits: set[str]) 
     # Non-merge commits have the same self-reference problem only for
     # metadata-only evidence commits. Do not let a code commit inherit stale
     # first-parent evidence.
-    return bool(parents) and parents[0] in evidence_commits and head_is_metadata_only(project, parents[0])
+    if bool(parents) and parents[0] in evidence_commits and head_is_metadata_only(project, parents[0]):
+        return True
+    # Closed task evidence should not be invalidated by later commits that
+    # touch files outside that task's declared scope. Same-scope changes still
+    # require fresh evidence and remain blocked by the review_old_sha test.
+    ancestor = nearest_evidence_ancestor(project, head, evidence_commits)
+    return bool(ancestor and task_scope_unchanged_since(project, task, ancestor, head))
 
 
 def is_git_repo(project: Path) -> bool:
@@ -398,7 +457,7 @@ def validate_evidence(project: Path, task: Task, context: str = "task evidence")
     lowered = f"{task.text}\n{evidence_text}".lower()
     is_prefix_evidence = "pre-fix" in lowered or "pre-review" in lowered
     if head and not is_prefix_evidence:
-        if not head_matches_evidence(project, head, file_commits):
+        if not head_matches_evidence(project, head, file_commits, task):
             found = ", ".join(sorted(file_commits)) or "none"
             raise GateError(f"{task.task_id}: evidence file SHA is stale or missing current HEAD {head}; found {found}")
 
@@ -408,7 +467,7 @@ def validate_evidence(project: Path, task: Task, context: str = "task evidence")
             raise GateError(f"{task.task_id}: review evidence is diff-only")
         if "full-code-path" not in lowered:
             raise GateError(f"{task.task_id}: review evidence must include full-code-path")
-        if head and not head_matches_evidence(project, head, evidence_commits) and not is_prefix_evidence:
+        if head and not head_matches_evidence(project, head, evidence_commits, task) and not is_prefix_evidence:
             raise GateError(f"{task.task_id}: review evidence must match current HEAD {head}")
 
     if "codex" in lowered:

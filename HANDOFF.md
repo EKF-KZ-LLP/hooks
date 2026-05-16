@@ -507,6 +507,30 @@
   commit: pending
   timestamp: 2026-05-16T12:08:00+03:00
 
+- attempt: 42
+  task_id: TASK-020
+  trigger: test_failed
+  hypothesis: A later code commit outside a closed task's declared scope should not force old evidence for that closed task to mention the new HEAD.
+  action: Added regression `unrelated code change does not stale closed task evidence`.
+  command_or_artifact: `bash tests/negative-ralph-loop-enforcement.sh`
+  result: RED as expected: unrelated code change was still blocked as stale evidence.
+  next_decision: patch evidence HEAD matching so same-scope code changes block, unrelated scoped changes allow.
+  evidence: `tests/negative-ralph-loop-enforcement.sh`
+  commit: pending
+  timestamp: 2026-05-16T12:12:00+03:00
+
+- attempt: 43
+  task_id: TASK-020
+  trigger: test_passed
+  hypothesis: Scope-aware stale evidence handling can reduce false pre-push blocks without letting changed task files bypass fresh verification.
+  action: Added ancestor detection and task-scope comparison to `head_matches_evidence`, fixed the regression fixture so the scoped docs task is verified before the unrelated code commit, synced runtime validator and reran the negative suite.
+  command_or_artifact: `global/ralph-loop-validate.py`; `/Users/antonsahovskii/.claude/hooks/ralph-loop-validate.py`; `bash tests/negative-ralph-loop-enforcement.sh`
+  result: PASS. Negative suite reports 42 passed. Same-scope `review evidence on old SHA` still blocks; unrelated scoped code change allows.
+  next_decision: rerun syntax/forbidden-symbol checks and push Hooks PR #2 update.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-16T12:16:00+03:00
+
 - attempt: 18
   task_id: TASK-014
   trigger: test_failed
