@@ -25,7 +25,7 @@
 #
 # Bypass: pipe through PreToolUse Edit/Write/MultiEdit so the proper
 # anti-cheat hook (03) runs. There is no `--ralph-override` for this
-# file class — direct Bash writes are NEVER legitimate.
+# file class - direct Bash writes are NEVER legitimate.
 set -euo pipefail
 
 INPUT="$(cat || true)"
@@ -34,7 +34,7 @@ CMD="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null |
 [[ -n "$CMD" ]] || exit 0
 
 # Path patterns that must not be written via Bash.
-# 2026-05-12 added `\.checkpoints/[^[:space:]]*/skip-reason\.md` —
+# 2026-05-12 added `\.checkpoints/[^[:space:]]*/skip-reason\.md` -
 # skip-reason.md was a cheat vector: agent wrote it directly to fake
 # user OVERRIDE-authored SKIPs. Only hook 02 (UserPromptSubmit) is
 # allowed to create skip-reason.md.
