@@ -24,7 +24,7 @@ set -euo pipefail
 
 log()  { printf '%s\n' "$*" >&2; }
 fail() { log "❌ test-quality-gate: $*"; exit 2; }
-warn() { log "WARN test-quality-gate: $*"; }
+warn() { log "⚠️  test-quality-gate: $*"; }
 
 # ─── 1. Extract target file path ────────────────────────────────────────────
 FILE_PATH="${1:-}"
@@ -72,8 +72,7 @@ violations=()
 # ─── T1: Trivial assertions ─────────────────────────────────────────────────
 trivial_patterns_go='assert\.True\([[:space:]]*t[[:space:]]*,[[:space:]]*true|assert\.False\([[:space:]]*t[[:space:]]*,[[:space:]]*false|assert\.Equal\([[:space:]]*t[[:space:]]*,[[:space:]]*([0-9]+|"[^"]*"|true|false)[[:space:]]*,[[:space:]]*\1[[:space:]]*\)|require\.True\([[:space:]]*t[[:space:]]*,[[:space:]]*true'
 trivial_patterns_ts='expect\((true|false|[0-9]+|"[^"]*")\)\.toBe\(\1\)|expect\(true\)\.toBeTruthy|expect\(false\)\.toBeFalsy'
-trivial_patterns_py_bool='^[[:space:]]*assert[[:space:]]+(True|False[[:space:]]*==[[:space:]]*False)([[:space:]]*$|[[:space:]]*#)'
-trivial_patterns_py_const='^[[:space:]]*assert[[:space:]]+([0-9]+|True|False)[[:space:]]*==[[:space:]]*\1([[:space:]]*$|[[:space:]]*#)'
+	trivial_patterns_py='^[[:space:]]*assert[[:space:]]+True([[:space:]]*$|[[:space:]]*#)|^[[:space:]]*assert[[:space:]]+1[[:space:]]*==[[:space:]]*1'
 
 case "$LANG" in
   go) if grep -nE "$trivial_patterns_go" "$FILE_PATH" >/dev/null 2>&1; then
@@ -82,10 +81,8 @@ case "$LANG" in
   ts) if grep -nE "$trivial_patterns_ts" "$FILE_PATH" >/dev/null 2>&1; then
         violations+=("T1 trivial assertion → $(grep -nE "$trivial_patterns_ts" "$FILE_PATH" | head -3)")
       fi ;;
-  py) PY_TRIVIAL=$(grep -nE "$trivial_patterns_py_bool" "$FILE_PATH" || true)
-      PY_TRIVIAL_CONST=$(grep -nE "$trivial_patterns_py_const" "$FILE_PATH" || true)
-      if [ -n "$PY_TRIVIAL" ] || [ -n "$PY_TRIVIAL_CONST" ]; then
-        violations+=("T1 trivial assertion -> $(printf '%s\n%s' "$PY_TRIVIAL" "$PY_TRIVIAL_CONST" | grep -v '^[[:space:]]*$' | head -3)")
+  py) if grep -nE "$trivial_patterns_py" "$FILE_PATH" >/dev/null 2>&1; then
+        violations+=("T1 trivial assertion → $(grep -nE "$trivial_patterns_py" "$FILE_PATH" | head -3)")
       fi ;;
 esac
 

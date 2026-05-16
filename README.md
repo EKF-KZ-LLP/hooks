@@ -28,6 +28,19 @@
 │   ├── run-codex-review-infra.sh   (helper: Codex review через Claude Code plugin runtime)
 │   └── gitnexus/
 │       └── gitnexus-hook.cjs       (PreToolUse Bash/Grep/Glob: подсказка про knowledge graph)
+├── shared/
+│   └── agent-hooks/                ← в ~/.local/share/agent-hooks/
+│       ├── plan-tracker-edit-guard.py
+│       ├── 03-plan-tracker-edit-guard.sh
+│       ├── policy-runner.js
+│       ├── codex-plan-guard.js
+│       ├── claude-mem-*.js|*.sh
+│       └── *.test.*                (runtime tests for shared hooks/patchers)
+├── git-hooks/                      ← optional native Git hooks copied to <repo>/.githooks/
+│   ├── pre-commit                  (validator precommit)
+│   └── pre-push                    (main/master direct push block + tracker stop gate if active)
+├── scripts/
+│   └── install-hooks-source.sh     (copy global/shared/per-repo hooks into target repo)
 └── per-repo/
     ├── ralph-loop/                 ← каноническая Ralph Loop версия (VCM)
     │   ├── 01-session-start-load-context.sh
@@ -67,7 +80,7 @@
 |------|-------|-----------|------------------------|
 | `launcher.sh` | вспомогательный | Диспетчер. Принимает имя per-repo hook leaf, ищет в `$(git toplevel)/.claude/hooks/`, no-op если нет → repos без Ralph Loop не блокируются. | Per-repo opt-in вместо global force |
 | `guard-no-secrets.sh` | PreToolUse Write\|Edit | Блок hardcoded ключей API/токенов/паролей в файлах | Plaintext secret в коммите |
-| `guard-no-force-push.sh` | PreToolUse Bash | Блок force push на main/master: `--force`/`-f`, `+refspec:main`, `+refspec:refs/heads/main`, `--mirror`, `git update-ref refs/heads/main`, `git reset --hard main`, `git branch -d main` | Все известные force-paths включая refspec hacks |
+| `guard-no-force-push.sh` | PreToolUse Bash | Блок direct push на main/master, `git --no-verify`, force push на main/master: `--force`/`-f`, `+refspec:main`, `+refspec:refs/heads/main`, `--all`, `--mirror`, `git update-ref refs/heads/main`, `git reset --hard main`, `git branch -d main` | Bypass локальных hooks, прямой push без PR, force-paths включая refspec hacks |
 | `guard-no-tracker-overwrite.sh` | PreToolUse Bash | Two-phase: (1) command references защищенный путь (`.claude/active-tracker`, `.evidence/*plan*.md`, `.checkpoints/*/evidence.md`, `.checkpoints/*/attempt-*.md`, `.checkpoints/*/pre-fix-failing-test.md`, `.checkpoints/*/*review*.md`, `.checkpoints/*/skip-reason.md`, `WORKPLAN.md`, `HANDOFF.md`); (2) command содержит write-intent verb. Оба условия дают deny. | Bash heredoc / interpreter writes обходящие Edit/Write hook chain |
 | `enforce-iter-cap.sh` | PreToolUse Bash | (1) iter-commits > 3 на feature branch → deny без `--iter-cap-override`. (2) `gh pr merge --admin` (literal, $()-substituted, "quoted"-escaped) → deny без `--ralph-override`. (3) `gh api .../pulls/N/merge` или `gh api --method PUT` к merge-endpoint → deny без `--ralph-override` | Patch-forever loop + --admin server-side bypass + gh api endpoint bypass |
 | `block-fatigue-excuses.sh` | PreToolUse Write\|Edit | Keyword guard для excuse phrases (LLM does not fatigue) в commits/reports | Bogus justification вместо real reason |
@@ -78,15 +91,52 @@
 | `run-codex-review-infra.sh` | helper | Запускает Codex через Claude Code Codex plugin companion, пишет evidence с `Claude Code plugin`, `codex:rescue`, `codex:codex-rescue`, `full-code-path`, `Command`, `Result`, `Commit`. | `codex exec` и самописный review evidence больше не проходят strict validator |
 | `gitnexus/gitnexus-hook.cjs` | PreToolUse Bash\|Grep\|Glob | На `grep/find/rg/fd`-команды показывает «есть граф знаний - читай GRAPH_REPORT.md» | Brute search vs indexed graph |
 
+## Shared agent hooks (`shared/agent-hooks/`)
+
+Эта папка синхронизируется в `~/.local/share/agent-hooks/`.
+В ней лежат shared runners, которые не должны копироваться отдельно в каждый
+проект:
+
+- `plan-tracker-edit-guard.py` - canonical implementation для hook 03.
+- `03-plan-tracker-edit-guard.sh` - runtime wrapper.
+- `policy-runner.js`, `codex-plan-guard.js` - Codex/Claude policy helpers.
+- `claude-mem-*`, `patch-*` - local Claude-Mem/GitNexus/Codex maintenance hooks.
+- `*.test.*` - regression tests for shared runtime.
+
+Per-repo `03-plan-tracker-edit-guard.sh` является тонким wrapper-ом на
+`/Users/antonsahovskii/.local/share/agent-hooks/plan-tracker-edit-guard.py`.
+Поэтому при установке нового проекта нужно копировать не только `per-repo/`,
+но и `shared/agent-hooks/`.
+
+## Native Git hooks (`git-hooks/`)
+
+Эти hooks нужны как защита вне Claude Code:
+
+- `pre-commit` запускает `ralph-loop-validate.py precommit`, если validator есть.
+- `pre-push` всегда блокирует direct push из `main/master` и push в
+  `refs/heads/main|master`. Ralph Stop gate запускается только если в проекте
+  есть `.claude/active-tracker`; проекты без tracker не получают ложный block.
+
+## Layering policy
+
+- P0 always-on: secrets, destructive shell/git/database commands, direct
+  main/master push, `git --no-verify`, direct tracker/evidence writes and unsafe
+  PR/MR merge.
+- P1 opt-in per project: active tracker workflow, Stop gate, test/TDD evidence
+  gates and Codex review gate. These are installed only in projects that opt in
+  with `.claude/active-tracker` or copied project hooks.
+- P2 advisory: reminders, Serena/GitNexus nudges and latency telemetry. These
+  must not create hard-stop loops.
+
 ## Per-repo Ralph Loop hooks (`ralph-loop/`)
 
 | Hook | Event | Назначение |
 |------|-------|-----------|
 | `01-session-start-load-context.sh` | SessionStart | Fail-closed без active tracker и checkbox-ов. Читает global rules + project CLAUDE.md + active tracker, пишет `<repo>/.claude/session-context-summary.md`. |
 | `02-user-prompt-pending-tasks.sh` | UserPromptSubmit | Инжектит `[PENDING TASKS: N]` + first open + escape `OVERRIDE: skip task <slug>` |
-| `03-plan-tracker-edit-guard.sh` | PreToolUse Edit\|Write | Anti-cheat: разрешает только `[ ] -> [x]` flip, не дает писать evidence/skip files напрямую, проверяет contract evidence block. |
+| `03-plan-tracker-edit-guard.sh` | PreToolUse Edit\|Write | Anti-cheat: разрешает `[ ] -> [x]` только с `Verdict: PASS`, `in_progress -> failed` только с открытым checkbox и `Verdict: FAIL`, reopen `done/verified/failed -> planned/in_progress`, не дает писать evidence/skip files напрямую, проверяет contract evidence block. |
 | `04-gh-pr-merge-gate.sh` | PreToolUse Bash | `gh pr merge`, `glab mr merge`, direct API merge fail-closed без CI, CodeQL и current-SHA Codex review evidence. GitHub human review только informational, потому что бизнес-заказчик не code reviewer. |
-| `05-stop-open-tasks-gate.sh` | Stop\|SubagentStop | Вызывает общий validator: DONE blocked при open required TASK-ID, blocked/failed без true blocker, stale WORKPLAN/HANDOFF, invalid evidence. |
+| `05-stop-open-tasks-gate.sh` | Stop\|SubagentStop | Default Stop с open required TASK-ID не блокирует, а дает notice, чтобы не было overnight loop. Hard block включается при `RALPH_STOP_STRICT=1` или явном completion claim в transcript; тогда общий validator блокирует open tasks, blocked/failed без true blocker, stale WORKPLAN/HANDOFF и invalid evidence. |
 | `06-gh-pr-create-title-gate.sh` | PreToolUse Bash | `gh pr create --title` fuzzy-match со slug задачи (SequenceMatcher ratio ≥ 0.8) |
 | `07-gh-pr-create-iteration-gate.sh` | PreToolUse Bash | Iter-counter; ≥3 → forced SKIP path (skip-reason.md + `[x] [SKIP]`) |
 | `08-plan-mode-to-tracker.sh` | PostToolUse ExitPlanMode | Fail-closed если план не найден, не в git repo, без checkbox-ов или без Task Evidence Contract. |
@@ -95,7 +145,7 @@
 | `11-post-edit-tests-required.sh` | PostToolUse Edit\|Write\|MultiEdit | TDD warning layer; strict pre-fix failing test block живет в `ralph-loop-validate.py`. |
 | `12-pre-checkbox-flip-deep-review.sh` | PreToolUse Edit | Проверяет deep-review sections перед checkbox close. |
 | `13-pre-stop-deploy-green-gate.sh` | Stop\|SubagentStop | Opt-in deploy green gate. |
-| `14-pre-commit-evidence-gate.sh` | PreToolUse Bash | Блокирует `git commit`, если tracker evidence или WORKPLAN/HANDOFF stale. |
+| `14-pre-commit-evidence-gate.sh` | PreToolUse Bash | Блокирует `git commit`, если tracker evidence или WORKPLAN/HANDOFF stale. При нескольких `in_progress` выбирает задачу по staged files и `scope`; если scope неоднозначен - блокирует с понятным сообщением. |
 | `15-post-verification-failure-gate.sh` | PostToolUse Bash | После failed tests/lint/typecheck/CI/review/Codex требует свежий attempt в `HANDOFF.md` с evidence. |
 
 ## GitHub CI
@@ -107,6 +157,7 @@
 - `git diff --check`.
 - Scan на запрещенные символы.
 - `tests/negative-ralph-loop-enforcement.sh`.
+- `tests/stop-open-tasks-gate.sh`.
 
 CodeQL может быть включен GitHub default setup. Merge hook не считает локальный лог достаточным: для PR merge он сверяет GitHub required checks, CodeQL status, reviewDecision и PR HEAD SHA.
 
@@ -177,7 +228,7 @@ Hard rules:
 | `session-start.sh` | SessionStart | Инжектит rules + plan + пишет run-epoch baseline в TMPDIR |
 | `user-prompt-submit.sh` | UserPromptSubmit | `[PENDING: N]` header + OVERRIDE: skip → `[~]` с audit comment |
 | `pre-tool-use.sh` | PreToolUse Edit\|Write\|MultiEdit\|ExitPlanMode | 4-в-одном: flip guard + plan-location guard + evidence anti-tamper + ExitPlanMode auto-capture в `.evidence/plans/exitplanmode-<ts>.md` |
-| `stop.sh` | Stop | Блок exit пока `[ ]`. Escape: `WAIVE:` в last commit |
+| `stop.sh` | Stop | PSA-style вариант: блок exit пока `[ ]`. Escape: `WAIVE:` в last commit |
 
 ## Optional guards (`optional-guards/`)
 
@@ -198,4 +249,10 @@ Claude `deny`.
 
 ## Установка в новый проект
 
-См. `SETUP-PROMPT.md` - готовый prompt для Claude Code.
+Автоматический путь:
+
+```bash
+/Users/antonsahovskii/Dev/Hooks/scripts/install-hooks-source.sh --project /path/to/repo --with-git-hooks
+```
+
+Ручной путь: см. `SETUP-PROMPT.md` - готовый prompt для Claude Code.

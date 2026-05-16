@@ -220,6 +220,270 @@
   timestamp: 2026-05-12T11:05:31+03:00
 
 - attempt: 18
+  task_id: TASK-015
+  trigger: other
+  hypothesis: `/Dev/Hooks` drifted from live runtime during the hook hardening day; copying from it can reintroduce old 03 behavior and miss shared local agent-hooks.
+  action: Inspected git state, README/setup docs, runtime hashes for `guard-no-tracker-overwrite.sh`, `ralph-loop-validate.py`, hooks 02/05, and compared `per-repo/ralph-loop/03-plan-tracker-edit-guard.sh` to live shared runtime.
+  command_or_artifact: `git -C /Users/antonsahovskii/Dev/Hooks status --short`; `shasum -a 256 ...`; `sed -n ... README.md`; `sed -n ... per-repo/ralph-loop/03-plan-tracker-edit-guard.sh`; `sed -n ... ~/.local/share/agent-hooks/03-plan-tracker-edit-guard.sh`
+  result: Source repo still had old full shell implementation for hook 03, while live projects use a thin wrapper to `/Users/antonsahovskii/.local/share/agent-hooks/plan-tracker-edit-guard.py`. `global/guard-no-tracker-overwrite.sh` also differs from runtime. Need sync source before any further project copy.
+  next_decision: update canonical source, add safe git-hook templates, then run syntax and negative tests.
+  evidence: `WORKPLAN.md`
+  commit: pending
+  timestamp: 2026-05-14T23:49:42+03:00
+
+- attempt: 35
+  task_id: TASK-019
+  trigger: bug_report
+  hypothesis: `policy-runner` Stop gate is enforcing the right stale-evidence rule, but the block message is too terse, so Claude Code users see a session abort instead of a repair path.
+  action: Inspected runtime and canonical `policy-runner` code/tests before patching; confirmed Stop gate joins raw validation reasons into one short `BLOCKED: Stop gate: ...` line.
+  command_or_artifact: `sed -n '1,260p' ~/.local/share/agent-hooks/policy-runner.js`; `sed -n '1,320p' ~/.local/share/agent-hooks/policy-runner.test.js`; `cmp -s ~/.local/share/agent-hooks/policy-runner.js /Users/antonsahovskii/Dev/Hooks/shared/agent-hooks/policy-runner.js`
+  result: Runtime and canonical were in sync before the fix. Need a stale `head_sha` regression test first, then improve stderr remediation while preserving exit `2`.
+  next_decision: add failing regression test for stale Stop evidence.
+  evidence: `WORKPLAN.md`
+  commit: pending
+  timestamp: 2026-05-15T00:00:00+03:00
+
+- attempt: 19
+  task_id: TASK-015
+  trigger: test_failed
+  hypothesis: The main negative harness can hang on Bash 5.3 when `write_handoff_attempts` uses a nested heredoc inside a redirected command group and calls another heredoc-producing function through command substitution.
+  action: Killed the hung test process, refactored `write_handoff_attempts` to write the HANDOFF header first and append each attempt block with `cat >>`, while producing evidence before the append heredoc.
+  command_or_artifact: `bash /Users/antonsahovskii/Dev/Hooks/tests/negative-ralph-loop-enforcement.sh`; `sample 34175 1 1`; `tests/negative-ralph-loop-enforcement.sh`
+  result: pending rerun.
+  next_decision: rerun negative harness and syntax checks.
+  evidence: `tests/negative-ralph-loop-enforcement.sh`
+  commit: pending
+  timestamp: 2026-05-15T00:03:00+03:00
+
+- attempt: 20
+  task_id: TASK-015
+  trigger: test_failed
+  hypothesis: `guard-no-tracker-overwrite.sh` lost `touch` from WRITE_INTENT_RE in live runtime, so `touch WORKPLAN.md` can forge freshness without triggering the protected-file Bash guard.
+  action: Added `touch` back to WRITE_INTENT_RE in both canonical source and runtime global hook.
+  command_or_artifact: `tests/negative-ralph-loop-enforcement.sh`; `global/guard-no-tracker-overwrite.sh`; `~/.claude/hooks/guard-no-tracker-overwrite.sh`
+  result: pending rerun.
+  next_decision: patch 04 heredocs and rerun full negative suite.
+  evidence: pending
+  commit: pending
+  timestamp: 2026-05-15T00:09:00+03:00
+
+- attempt: 21
+  task_id: TASK-015
+  trigger: test_failed
+  hypothesis: `04-gh-pr-merge-gate.sh` can hang under command substitution because Bash writes heredoc payloads before the reader starts.
+  action: Replaced the no-Codex-evidence heredoc with a `printf` block and replaced the accepted-evidence here-doc loop with a newline-split `for` loop in both global and per-repo 04 gates.
+  command_or_artifact: `sample 32295 1 1`; `per-repo/ralph-loop/04-gh-pr-merge-gate.sh`; `global/04-gh-pr-merge-gate.sh`
+  result: pending rerun.
+  next_decision: sync 04 into prgate and rerun full checks.
+  evidence: pending
+  commit: pending
+  timestamp: 2026-05-15T00:10:00+03:00
+
+- attempt: 22
+  task_id: TASK-015
+  trigger: other
+  hypothesis: After syncing 03/04, adding shared runtime source and fixing guard/test defects, canonical `/Dev/Hooks` should be safe to copy into active projects.
+  action: Ran syntax checks, Python compile, Node checks, plan-tracker regression tests, main negative suite, optional guards suite, prgate docs-heavy guard suite, drift hashes, live prgate simulations and GitNexus detect changes.
+  command_or_artifact: `python3 -m py_compile global/ralph-loop-validate.py shared/agent-hooks/plan-tracker-edit-guard.py`; `find ... -name '*.sh' ... bash -n`; `find shared/agent-hooks ... node --check`; `bash shared/agent-hooks/plan-tracker-edit-guard.test.sh`; `bash tests/negative-ralph-loop-enforcement.sh`; `bash tests/optional-guards-enforcement.sh`; `git diff --check`; `mcp__gitnexus__.detect_changes(repo=hooks, scope=all)`
+  result: PASS. Plan-tracker tests `PASS=19 FAIL=0`; negative suite `negative tests passed: 33`; optional suite `optional guard tests passed: 8`; syntax/parse checks pass; `git diff --check` clean in `/Dev/Hooks`; GitNexus risk medium due touched validator/doc sections, no high-risk process.
+  next_decision: final report.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T00:14:00+03:00
+
+- attempt: 23
+  task_id: TASK-016
+  trigger: other
+  hypothesis: `05-stop-open-tasks-gate.sh` should not hard-block ordinary Stop when required tasks are still open; it should only block strict/completion-claim paths to avoid overnight "waiting" loops.
+  action: Added focused regression test `tests/stop-open-tasks-gate.sh` before changing hook behavior.
+  command_or_artifact: `tests/stop-open-tasks-gate.sh`
+  result: pending red run.
+  next_decision: run focused test, then implement soft default G_OPEN.
+  evidence: `tests/stop-open-tasks-gate.sh`
+  commit: pending
+  timestamp: 2026-05-15T08:31:00+03:00
+
+- attempt: 24
+  task_id: TASK-016
+  trigger: test_failed
+  hypothesis: Current 05 behavior hard-blocks ordinary Stop with open tasks, which causes repeated Claude Code Stop feedback loops and overnight spam.
+  action: Ran the new focused Stop regression test before changing hook behavior.
+  command_or_artifact: `bash /Users/antonsahovskii/Dev/Hooks/tests/stop-open-tasks-gate.sh`
+  result: Red as expected for default open-task and missing-tracker paths; strict and completion-claim block paths already behaved as blockers.
+  next_decision: change 05 so default Stop is soft notice while strict/completion paths stay hard.
+  evidence: `tests/stop-open-tasks-gate.sh`
+  commit: pending
+  timestamp: 2026-05-15T08:39:00+03:00
+
+- attempt: 25
+  task_id: TASK-016
+  trigger: other
+  hypothesis: Overblocking should be reduced by removing infrastructure command denies and softening only ordinary Stop, not by weakening destructive command, secret-file, strict Stop, or completion-claim enforcement.
+  action: Patched canonical 05, synced it into active project copies, removed command-deny entries for `ssh`, `scp`, `rsync`, `security`, `kubectl`, and `infisical`, updated docs and CI.
+  command_or_artifact: `per-repo/ralph-loop/05-stop-open-tasks-gate.sh`; `tests/stop-open-tasks-gate.sh`; `.github/workflows/ci.yml`; `README.md`; `SETUP-PROMPT.md`
+  result: Ordinary Stop with open tasks now exits `0` with a notice. `RALPH_STOP_STRICT=1` or transcript completion claims with open required tasks still exit `2`. Project copies in `vcm`, `meridian`, `psa`, and backup match the canonical 05 hash.
+  next_decision: run focused, broad, syntax, JSON, and sync checks.
+  evidence: `shasum -a 256 ... 05-stop-open-tasks-gate.sh`
+  commit: pending
+  timestamp: 2026-05-15T08:48:00+03:00
+
+- attempt: 26
+  task_id: TASK-016
+  trigger: other
+  hypothesis: The soft Stop change should not weaken existing P0 gates or optional guards.
+  action: Ran focused Stop tests, main negative suite, optional guard suite, shell syntax checks, JSON parse, git whitespace check, and SHA256 sync check for copied 05 hooks.
+  command_or_artifact: `bash tests/stop-open-tasks-gate.sh`; `bash tests/negative-ralph-loop-enforcement.sh`; `bash tests/optional-guards-enforcement.sh`; `find ... -name '*.sh' ... bash -n`; `git diff --check`
+  result: Focused Stop test reports 4 PASS; negative suite reports `negative tests passed: 33`; optional suite reports `optional guard tests passed: 8`; shell syntax, JSON parse, and `git diff --check` pass; all 05 copies share SHA256 `afb635b27b7abbf00dd2923779f31198d5fa0ed8fcc4748133929d52cd65a59b`.
+  next_decision: final report.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T08:55:00+03:00
+
+- attempt: 27
+  task_id: TASK-017
+  trigger: other
+  hypothesis: The remaining gap is not more hooks, but correct layering: P0 must be always-on, P1 only for projects that opted in, and P2 advisory only.
+  action: Start implementation pass with explicit success criteria before touching hook logic. First inventory current code/settings, then add failing tests for missing P0 behavior, then patch narrowly.
+  command_or_artifact: `/Users/antonsahovskii/Documents/Dev/claude-agents/Setting OS/.agent-state/current-step.json`; `WORKPLAN.md`
+  result: in progress.
+  next_decision: inspect policy-runner and active project wiring without printing secrets.
+  evidence: `WORKPLAN.md`
+  commit: pending
+  timestamp: 2026-05-15T09:05:00+03:00
+
+- attempt: 28
+  task_id: TASK-017
+  trigger: test_failed
+  hypothesis: P0 main/master push and `git --no-verify` are not yet enforced by always-on runtime policy.
+  action: Added red regressions to `policy-runner.test.js` and `tests/negative-ralph-loop-enforcement.sh` before changing guard code.
+  command_or_artifact: `/Users/antonsahovskii/.local/bin/policy-runner test`; `bash tests/negative-ralph-loop-enforcement.sh`
+  result: Red as expected. `policy-runner` failed 2/30 tests on main branch push and no-verify. Ralph negative suite failed `direct main push without PR blocks` and `git no-verify blocks`.
+  next_decision: patch `policy-runner` and `guard-no-force-push.sh`, then rerun full checks.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T09:14:00+03:00
+
+- attempt: 29
+  task_id: TASK-017
+  trigger: other
+  hypothesis: P0 can be made always-on without reintroducing broad ssh/infisical-style command bans by targeting only main/master push and `--no-verify`.
+  action: Patched runtime/source `policy-runner.js`, runtime/source `policy-runner.test.js`, canonical/runtime `guard-no-force-push.sh`, and synced active tracker project hooks/settings for 03/04/05/11/14/15.
+  command_or_artifact: `shared/agent-hooks/policy-runner.js`; `global/guard-no-force-push.sh`; project `.claude/settings.json`; project `.claude/hooks/*`
+  result: P0 main/master push and `git --no-verify` block in policy-runner and shell guard. Feature branch push still allows. Active tracker projects now have no missing P1 hook wiring.
+  next_decision: run full regression, syntax, JSON, health and live simulations.
+  evidence: project wiring inventory and SHA256 sync checks
+  commit: pending
+  timestamp: 2026-05-15T09:24:00+03:00
+
+- attempt: 30
+  task_id: TASK-017
+  trigger: other
+  hypothesis: The P0/P1/P2 layering changes should leave previous anti-cheat, Stop, optional guard and telemetry behavior intact.
+  action: Ran full local checks and live simulations.
+  command_or_artifact: `node shared/agent-hooks/policy-runner.test.js`; `/Users/antonsahovskii/.local/bin/policy-runner test`; `bash tests/negative-ralph-loop-enforcement.sh`; `bash tests/optional-guards-enforcement.sh`; `bash tests/stop-open-tasks-gate.sh`; `policy-runner health`; `git diff --check`
+  result: PASS. Shared and runtime policy-runner tests each report `30 tests passed`; Ralph negative suite reports `negative tests passed: 36`; optional suite reports `optional guard tests passed: 8`; Stop suite reports `stop-open-tasks-gate tests passed: 4`; telemetry p95 is `29ms` with zero slow events; syntax/JSON/diff checks pass.
+  next_decision: final report.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T09:35:00+03:00
+
+- attempt: 31
+  task_id: TASK-018
+  trigger: other
+  hypothesis: The real bug is not lack of a `failed` status alone; it is that failed/blocked need to remain open states and G14 must not pick the first `in_progress` task when staged files belong to a later task.
+  action: Start canonical-first hook optimization. Plan: inspect real G03/G14 code, add red regressions for failed/blocked and staged-file active-task selection, patch canonical/runtime, sync active tracker projects.
+  command_or_artifact: `/Users/antonsahovskii/Documents/Dev/claude-agents/Setting OS/.agent-state/current-step.json`; `WORKPLAN.md`
+  result: in progress.
+  next_decision: inspect shared 03 guard and Ralph validator precommit.
+  evidence: `WORKPLAN.md`
+  commit: pending
+  timestamp: 2026-05-15T09:45:00+03:00
+
+- attempt: 32
+  task_id: TASK-018
+  trigger: test_failed
+  hypothesis: Current G03 blocks honest `in_progress -> failed` even with Codex FAIL evidence, and current G14 picks the first `in_progress` task instead of selecting by staged-file scope.
+  action: Added red regressions to shared plan-tracker tests and Ralph negative suite.
+  command_or_artifact: `bash ~/.local/share/agent-hooks/plan-tracker-edit-guard.test.sh`; `bash tests/negative-ralph-loop-enforcement.sh`
+  result: Red as expected. G03 failed `status_failed_with_fail_evidence_allowed` and `reopen_failed_status_to_in_progress_allowed`; G14 failed `precommit selects matching later active task` and `precommit blocks ambiguous active scope match`.
+  next_decision: patch G03 failed-state flow and validator precommit task selection.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T09:58:00+03:00
+
+- attempt: 33
+  task_id: TASK-018
+  trigger: other
+  hypothesis: Failed state is safe if it remains open and requires immutable FAIL evidence; G14 can reduce false blocks by matching all staged governed files to exactly one active task scope.
+  action: Added `validate_fail_evidence` to G03, allowed `planned|in_progress -> failed` only with open checkbox and `Verdict: FAIL`, allowed `failed -> planned|in_progress` reopen, and changed G14 precommit to select active task by staged file scope.
+  command_or_artifact: `shared/agent-hooks/plan-tracker-edit-guard.py`; `global/ralph-loop-validate.py`
+  result: Canonical, runtime and active-tracker project hooks synced. G14 runtime smoke using `/Users/antonsahovskii/.claude/hooks/ralph-loop-validate.py` allowed staged `src/new.py` when it matched the later active task scope.
+  next_decision: run full regression and report to Claude.
+  evidence: SHA256 sync output and runtime smoke in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T10:08:00+03:00
+
+- attempt: 34
+  task_id: TASK-018
+  trigger: other
+  hypothesis: Existing safety gates should remain green after adding failed-state and smarter G14 selection.
+  action: Ran focused and broad checks.
+  command_or_artifact: `plan-tracker-edit-guard.test.sh`; `tests/negative-ralph-loop-enforcement.sh`; `tests/optional-guards-enforcement.sh`; `tests/stop-open-tasks-gate.sh`; `policy-runner test`; syntax/JSON/hash checks; `git diff --check`
+  result: PASS. G03 tests `PASS=22 FAIL=0`; negative suite `negative tests passed: 38`; optional suite `optional guard tests passed: 8`; Stop suite `stop-open-tasks-gate tests passed: 4`; policy runner `30 tests passed`; syntax, JSON parse, hash sync and `git diff --check` clean.
+  next_decision: final report and response text for Claude.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T10:16:00+03:00
+
+- attempt: 36
+  task_id: TASK-019
+  trigger: test_passed
+  hypothesis: Stop gate can remain a hard evidence gate while giving the agent enough remediation text to continue instead of looking like a silent session abort.
+  action: Added a stale `head_sha` regression test, confirmed it failed against the old terse message, patched Stop block formatting, synced runtime to canonical source, and reran checks.
+  command_or_artifact: `node /Users/antonsahovskii/.local/share/agent-hooks/policy-runner.test.js`; `/Users/antonsahovskii/.local/bin/policy-runner test`; `node /Users/antonsahovskii/Dev/Hooks/shared/agent-hooks/policy-runner.test.js`; `node --check`; `git diff --check`; runtime/canonical `cmp`
+  result: PASS. Runtime and canonical `policy-runner` suites report `31 tests passed`; `node --check` is clean; `git diff --check` is clean; runtime and canonical `policy-runner.js`/test files compare equal.
+  next_decision: final report to user.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-15T10:30:00+03:00
+
+- attempt: 37
+  task_id: TASK-020
+  trigger: bug_report
+  hypothesis: PSA pre-push was blocked by an impossible merge-commit evidence self-reference: adding the merge SHA to evidence changes that same SHA.
+  action: Added a regression where a synthetic merge commit must accept evidence that names the verified first parent, then patched canonical and runtime `ralph-loop-validate.py`.
+  command_or_artifact: `bash tests/negative-ralph-loop-enforcement.sh`; `global/ralph-loop-validate.py`; `/Users/antonsahovskii/.claude/hooks/ralph-loop-validate.py`
+  result: Regression passes. The PSA branch pushed successfully after the runtime validator accepted first-parent evidence for merge HEAD `913912b4f1a4eed4159a16f62862cde49f41bbbf`.
+  next_decision: check source/runtime parity for other shared hooks before committing Hooks source.
+  evidence: local command output and PSA push output in current Codex session
+  commit: pending
+  timestamp: 2026-05-16T11:40:00+03:00
+
+- attempt: 38
+  task_id: TASK-020
+  trigger: drift
+  hypothesis: `/Dev/Hooks/shared/agent-hooks/policy-runner*` can lag behind live runtime, making future copy/install flows unsafe.
+  action: Compared source and runtime `policy-runner.js` plus tests, found source had 31 tests while runtime had 36 coverage-scope tests, then synced source from runtime.
+  command_or_artifact: `cmp -s shared/agent-hooks/policy-runner.js ~/.local/share/agent-hooks/policy-runner.js`; `cmp -s shared/agent-hooks/policy-runner.test.js ~/.local/share/agent-hooks/policy-runner.test.js`; `cp ~/.local/share/agent-hooks/policy-runner* shared/agent-hooks/`
+  result: Source now contains the runtime coverage-scope behavior and tests. Pending rerun must show source/runtime test counts match.
+  next_decision: rerun policy-runner, JS hook tests, syntax, GitNexus detect changes, then commit.
+  evidence: `shared/agent-hooks/policy-runner.js`, `shared/agent-hooks/policy-runner.test.js`
+  commit: pending
+  timestamp: 2026-05-16T11:48:00+03:00
+
+- attempt: 39
+  task_id: TASK-020
+  trigger: test_passed
+  hypothesis: After syncing policy-runner source from runtime, the canonical Hooks repo should be safe to commit as the source of truth.
+  action: Reran source/runtime policy-runner tests, full shared JS hook tests, Codex plan guard tests, Python compile, shell syntax checks, runtime/source `cmp`, GitNexus detect changes and `git diff --check`.
+  command_or_artifact: `node shared/agent-hooks/policy-runner.test.js`; `/Users/antonsahovskii/.local/bin/policy-runner test`; `for f in shared/agent-hooks/*.test.js; do node "$f"; done`; `node --test shared/agent-hooks/tests/codex-plan-guard.test.mjs`; `python3 -m py_compile ...`; `git diff --check`; `mcp__gitnexus__.detect_changes(repo=hooks, scope=all)`
+  result: PASS. Source and runtime policy-runner suites each report 36 tests. Shared JS hook tests pass, Codex plan guard reports 8 pass, Python/shell syntax and whitespace checks pass, runtime/source `cmp` returns zero. GitNexus reports critical expected impact because core hook enforcement paths changed; covered by negative and policy suites.
+  next_decision: commit Hooks source and return to PSA PR checks.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-16T11:58:00+03:00
+
+- attempt: 18
   task_id: TASK-014
   trigger: test_failed
   hypothesis: Final tracker update can leave the working tree in a different state than pushed HEAD, so optional guard tests must be rerun after local evidence edits.

@@ -27,6 +27,13 @@ repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 override=$(printf '%s' "$prompt" | grep -m1 -oE '^OVERRIDE: skip task [a-z0-9-]+' || true)
 if [ -n "$override" ]; then
     slug=$(echo "$override" | awk '{print $4}')
+    prompt_hash=$(printf '%s' "$prompt" | shasum -a 256 | awk '{print $1}')
+    prompt_hash_short="${prompt_hash:0:8}"
+    approval_refs="$HOME/.claude/approval-refs.allow"
+    if [ ! -f "$approval_refs" ] || ! grep -qE "^(($prompt_hash)|($prompt_hash_short))([[:space:]]|$)" "$approval_refs"; then
+        echo "::error::ralph-loop-02: OVERRIDE for '$slug' requires a user-authored approval ref in $approval_refs. Add exact prompt hash '$prompt_hash' or short ref '$prompt_hash_short' from a real user approval, then resend the OVERRIDE prompt." >&2
+        exit 2
+    fi
     skip_dir="$repo/.checkpoints/$slug"
     mkdir -p "$skip_dir"
     skip_file="$skip_dir/skip-reason.md"
@@ -34,7 +41,6 @@ if [ -n "$override" ]; then
     # prevents agent overwriting a stale skip with a fresh one to bypass
     # the timestamp check below.
     if [ ! -f "$skip_file" ]; then
-        prompt_hash=$(printf '%s' "$prompt" | shasum -a 256 | awk '{print $1}')
         ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
         # Make writable in case a previous chmod 444 attempt landed.
         rm -f "$skip_file"
@@ -75,7 +81,7 @@ PYEOF
 fi
 
 open_tasks=$(grep -nE "^- \[ \]" "$tracker" 2>/dev/null || true)
-open_count=$(printf '%s' "$open_tasks" | grep -c . 2>/dev/null || echo 0)
+open_count=$(printf '%s' "$open_tasks" | grep -c . 2>/dev/null || true)
 
 if [ "$open_count" -eq 0 ]; then
     cat <<EOF

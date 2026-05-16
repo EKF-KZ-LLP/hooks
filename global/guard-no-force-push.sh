@@ -8,6 +8,13 @@ if [ -z "$COMMAND" ]; then
     exit 0
 fi
 
+# `--no-verify` is an explicit attempt to bypass local safety gates.
+# It is blocked globally for commit/merge/rebase/push paths.
+if echo "$COMMAND" | grep -qE 'git[[:space:]]+(commit|merge|rebase|push)\b[^|;&]*--no-verify\b'; then
+    echo "BLOCKED: git --no-verify bypasses safety hooks. Run the hooks and fix the failure instead." >&2
+    exit 2
+fi
+
 # Explicit approval token for destructive local operations. This is not
 # accepted for force-push to main/master; those stay hard blocked below.
 has_approval=0
@@ -27,6 +34,18 @@ if [ "$has_approval" -ne 1 ] && echo "$COMMAND" | grep -qE 'git[[:space:]]+(clea
 fi
 if [ "$has_approval" -ne 1 ] && echo "$COMMAND" | grep -qiE '\b(psql|mysql|clickhouse-client)\b[^|;&]*\b(drop[[:space:]]+(table|database|schema)|truncate[[:space:]]+table|delete[[:space:]]+from[[:space:]]+[A-Za-z0-9_."]+[[:space:]]*($|;))'; then
     echo "BLOCKED: destructive database command requires explicit approval marker --destructive-approved." >&2
+    exit 2
+fi
+
+# Direct main/master push is a P0 hard block. It must go through a
+# feature branch and PR/Codex review path.
+if echo "$COMMAND" | grep -qE 'git[[:space:]]+push\b[^|;&]*([[:space:]]|:)(refs/heads/)?(main|master)\b'; then
+    echo "BLOCKED: direct push to main/master is forbidden. Use a feature branch and PR." >&2
+    exit 2
+fi
+
+if echo "$COMMAND" | grep -qE 'git[[:space:]]+push\b[^|;&]*(--all|--mirror)\b'; then
+    echo "BLOCKED: git push --all/--mirror can update main/master outside review. Use a feature branch and PR." >&2
     exit 2
 fi
 

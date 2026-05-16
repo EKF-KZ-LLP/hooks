@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+validator=/Users/antonsahovskii/.claude/hooks/ralph-loop-validate.py
+
+if [ -f "$validator" ]; then
+  python3 "$validator" precommit --project "$repo"
+else
+  echo "pre-commit: validator missing at $validator, skipped Ralph precommit gate" >&2
+fi

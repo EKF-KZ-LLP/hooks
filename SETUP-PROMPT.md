@@ -33,19 +33,25 @@ hooks и удалит дубли.
 5. Создай (если нет) $CLAUDE_CONFIG_DIR/hooks/ (fallback ~/.claude/hooks/).
 6. Скопируй ВСЕ из /Users/antonsahovskii/Dev/Hooks/global/ включая
    gitnexus/ подпапку. chmod +x на каждый .sh.
-7. Открой $CLAUDE_CONFIG_DIR/settings.json (fallback ~/.claude/settings.json).
+7. Скопируй shared runtime:
+   /Users/antonsahovskii/Dev/Hooks/shared/agent-hooks/ ->
+   ~/.local/share/agent-hooks/
+   chmod +x на `*.sh`; `*.py`, `*.js`, `*.mjs` оставь readable.
+   Это обязательно: per-repo hook 03 является wrapper-ом на
+   ~/.local/share/agent-hooks/plan-tracker-edit-guard.py.
+8. Открой $CLAUDE_CONFIG_DIR/settings.json (fallback ~/.claude/settings.json).
    Образец hooks block - /Users/antonsahovskii/.claude/settings.json
    ключ "hooks". Скопируй его 1-в-1. Все пути в командах должны
    указывать на КОНКРЕТНУЮ claude-home абсолютно. ~ внутри settings.json
    не expands в некоторых версиях Claude Code.
 
 ЭТАП 2 - PER-REPO RALPH LOOP (выбери ОДИН вариант)
-8a. ВАРИАНТ A (canonical Ralph Loop, 15 файлов): скопируй
+9a. ВАРИАНТ A (canonical Ralph Loop, 15 файлов): скопируй
     /Users/antonsahovskii/Dev/Hooks/per-repo/ralph-loop/01-*.sh ... 15-*.sh
     в <repo>/.claude/hooks/. chmod +x. Используй если хочешь
     максимальную discipline и готов писать tracker в строгом формате.
 
-8b. ВАРИАНТ B (psa-style, 4 файла): скопируй
+9b. ВАРИАНТ B (psa-style, 4 файла): скопируй
     /Users/antonsahovskii/Dev/Hooks/per-repo/psa-style-ralph/*.sh.
     Используй если хочешь меньше файлов и проще naming.
 
@@ -55,7 +61,7 @@ hooks и удалит дубли.
     как образец.
 
 ЭТАП 3 - OPTIONAL GUARDS (по стеку)
-9. Из /Users/antonsahovskii/Dev/Hooks/per-repo/optional-guards/
+10. Из /Users/antonsahovskii/Dev/Hooks/per-repo/optional-guards/
    подключи ТОЛЬКО применимые:
    - assertion-change-guard.sh: если есть тесты и нужно блокировать
      assertion-only change без production/source change.
@@ -70,7 +76,7 @@ hooks и удалит дубли.
    matcher pattern.
 
 ЭТАП 4 - ПЕРВЫЙ TRACKER
-10. Если репо не имеет active-tracker, создай заглушку:
+11. Если репо не имеет active-tracker, создай заглушку:
     echo "# <project> tracker" > <repo>/.claude/active-tracker.template.md
     echo "" >> <repo>/.claude/active-tracker.template.md
     echo "- [ ] TASK-001: первая задача" >> ...
@@ -88,11 +94,18 @@ hooks и удалит дубли.
     создать через plan-mode + 08-plan-mode-to-tracker.sh?»
 
 ЭТАП 5 - SMOKE TESTS (обязательно перед DONE)
-11. Прогон каждого global hook через стандартный JSON input.
+12. Если нужен быстрый install path, вместо ручных шагов 5-10 можно
+    использовать:
+    `/Users/antonsahovskii/Dev/Hooks/scripts/install-hooks-source.sh --project <repo> --with-git-hooks`
+    После этого все равно выполнить smoke tests ниже.
+13. Прогон каждого global hook через стандартный JSON input.
     - guard-no-tracker-overwrite:
       `{"tool_input":{"command":"echo X > <repo>/.claude/active-tracker"}}` → exit 2.
     - guard-no-force-push:
       `{"tool_input":{"command":"git push origin +HEAD:main"}}` → exit 2.
+      `{"tool_input":{"command":"git push origin main"}}` → exit 2.
+      `{"tool_input":{"command":"git commit --no-verify -m bypass"}}` → exit 2.
+      `{"tool_input":{"command":"git push origin feature/my-branch"}}` → exit 0.
     - enforce-iter-cap:
       `{"tool_input":{"command":"gh pr merge 1 --admin"}}` → exit 2.
     - guard-no-secrets:
@@ -100,29 +113,47 @@ hooks и удалит дубли.
     - ralph-loop-enforce:
       попробуй закрыть `[x] TASK-001` без `.checkpoints/TASK-001/evidence.md`
       с `Command/Result/Commit` - должен deny.
+      `status: in_progress` -> `status: failed` должен allow только если
+      checkbox остается `[ ]`, а evidence содержит `Verdict: FAIL`.
+      `status: failed` -> `status: in_progress` должен allow для повторной
+      работы.
     - record-pre-fix-failing-test:
       команда, которая проходит, должна дать exit 2; команда, которая падает,
       должна создать `.checkpoints/TASK-001/pre-fix-failing-test.md`.
     - 15-post-verification-failure-gate:
       failed `pytest`/`lint` без свежего attempt в `HANDOFF.md` должен дать exit 2.
+    - 14-pre-commit-evidence-gate:
+      если несколько `in_progress`, staged files должны выбрать task по `scope`;
+      при двух совпадающих scope должен быть exit 2 с ambiguous message.
     - 04-gh-pr-merge-gate:
       GitHub pending human reviewer не должен блокировать при валидном Codex evidence;
       merge без Codex evidence должен дать exit 2.
     - optional guards, если подключены:
       assertion-only test change, fixture + assertion change без production,
       trivial assert, skip без issue и destructive SQL должны блокироваться.
-12. Если есть per-repo Ralph Loop: создай <repo>/.claude/active-tracker
-    с валидным `TASK-001` contract и `status: in_progress` - Stop должен exit 2.
-13. Если устанавливаешь из этого repo, запусти:
+14. Если есть per-repo Ralph Loop: создай <repo>/.claude/active-tracker
+    с валидным `TASK-001` contract и `status: in_progress`.
+    - обычный Stop должен exit 0 + notice, чтобы не было loop;
+    - `RALPH_STOP_STRICT=1` или явный completion claim должен exit 2.
+15. Если устанавливаешь из этого repo, запусти:
     `/Users/antonsahovskii/Dev/Hooks/tests/negative-ralph-loop-enforcement.sh`
-14. Если подключал optional guards, запусти:
+16. Если подключал optional guards, запусти:
     `/Users/antonsahovskii/Dev/Hooks/tests/optional-guards-enforcement.sh`
-15. Если проект хранится на GitHub, добавь или адаптируй server CI по образцу
+17. Для Stop gate обязательно запусти:
+    `/Users/antonsahovskii/Dev/Hooks/tests/stop-open-tasks-gate.sh`
+18. Если проект хранится на GitHub, добавь или адаптируй server CI по образцу
     `/Users/antonsahovskii/Dev/Hooks/.github/workflows/ci.yml`, чтобы
     negative enforcement tests гонялись не только локально.
+19. Если включены native Git hooks, проверь:
+    - `git config core.hooksPath` -> `.githooks`
+    - `git push origin HEAD:main` должен блокироваться локально.
+    - `git push origin main` и `git commit --no-verify` должны блокироваться
+      hook layer до выполнения.
+    - В проекте без `.claude/active-tracker` `pre-push` не должен падать
+      только из-за отсутствующего tracker.
 
 ЭТАП 6 - ОТЧЕТ
-16. Выведи структурированный отчет:
+20. Выведи структурированный отчет:
     - что было ДО (список существующих hooks + match с эталоном)
     - что стало ПОСЛЕ (новые/обновленные/удаленные с reasons)
     - smoke results (4 + опционально 1 stop test)
@@ -131,11 +162,13 @@ hooks и удалит дубли.
 
 КРИТЕРИИ ГОТОВНОСТИ:
 - Все файлы из `global/` + gitnexus подпапка в claude-home (chmod +x для executable).
+- Все файлы из `shared/agent-hooks/` в `~/.local/share/agent-hooks/`.
 - 15 (вариант A) или 4 (вариант B) per-repo hooks в <repo>/.claude/hooks/
   (chmod +x).
 - 0..6 optional guards подключены по применимости.
 - settings.json hooks block с правильными абсолютными путями.
-- Все smoke vectors blocked correctly, включая `ralph-loop-enforce` и Stop open-task gate.
+- Все smoke vectors blocked correctly, включая `ralph-loop-enforce`.
+- Stop open-task gate работает в двух режимах: default allow+notice, strict/completion block.
 - Если есть GitHub repo, server CI гоняет syntax + negative enforcement tests.
 - Backup folder backups/<timestamp>/ содержит все что было удалено.
 - НЕТ модификации кода вне .claude/ + claude-home.

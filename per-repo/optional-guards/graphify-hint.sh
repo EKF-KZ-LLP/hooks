@@ -25,9 +25,10 @@ fi
 
 [[ -z "${CMD:-}" ]] && exit 0
 
-# Match search-y commands
+# Match search-y commands, including commands at the beginning of the line.
 case "$CMD" in
-  grep\ *|*grep\ *|rg\ *|*\ rg\ *|ripgrep*|find\ *|*\ find\ *|fd\ *|*\ fd\ *|ack\ *|*\ ack\ *|ag\ *|*\ ag\ *) ;;
+  grep\ *|rg\ *|ripgrep\ *|find\ *|fd\ *|ack\ *|ag\ *|\
+  *\ grep\ *|*\ rg\ *|*ripgrep*|*\ find\ *|*\ fd\ *|*\ ack\ *|*\ ag\ *) ;;
   *) exit 0 ;;
 esac
 

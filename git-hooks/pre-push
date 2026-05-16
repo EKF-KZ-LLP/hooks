@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+  cat >&2 <<EOF
+BLOCKED: direct push from $branch is forbidden.
+
+Use a feature branch and PR. If this repo intentionally has no protected main
+flow, remove this hook only after explicit user approval.
+EOF
+  exit 2
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      cat >&2 <<EOF
+BLOCKED: direct push to ${remote_ref#refs/heads/} is forbidden.
+
+Use a feature branch and PR.
+EOF
+      exit 2
+      ;;
+  esac
+done
+
+repo=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+if [ -f "$repo/.claude/active-tracker" ]; then
+  python3 /Users/antonsahovskii/.claude/hooks/ralph-loop-validate.py stop --project "$repo"
+else
+  echo "pre-push: no .claude/active-tracker, skipped Ralph stop gate" >&2
+fi

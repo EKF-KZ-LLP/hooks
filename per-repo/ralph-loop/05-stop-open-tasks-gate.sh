@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Ralph-Loop hook 05 - Stop / SubagentStop.
-# Three gates fired on Stop:
+# Three gates fired on Stop when strict/completion mode is detected:
 #   G_OPEN  Refuses stop while open `[ ]` checkboxes remain in active-tracker.
 #   G15     Refuses stop when HANDOFF.md mtime is older than last code commit
 #           by more than HANDOFF_STALE_SEC (default 7200 = 2h).
 #   G32     Refuses stop when last commit body contains an invalid-blocker
 #           phrase ("не получилось", "тесты падают", "probably impossible"...)
 #           without an explicit attempt log entry in HANDOFF.md.
+# Default Stop with open tasks is soft-allow to avoid unattended "waiting"
+# loops. Hard block still happens for RALPH_STOP_STRICT=1 or a completion
+# claim in the last transcript lines.
 # Override marker: `touch <repo>/.claude/.allow-stop`.
 
 set -euo pipefail
+
+input="$(cat || true)"
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 [ -n "$repo" ] || exit 0
@@ -20,37 +25,58 @@ if [ ! -x "$validator" ]; then
     echo "Install global hooks from /Users/antonsahovskii/Dev/Hooks/global before Stop can pass." >&2
     exit 2
 fi
-python3 "$validator" stop --project "$repo"
 
 override_marker="$repo/.claude/.allow-stop"
 [ -f "$override_marker" ] && exit 0
+
+completion_claim=0
+transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null || true)
+if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+    recent_text=$(tail -n 80 "$transcript_path" 2>/dev/null || true)
+    if printf '%s' "$recent_text" | grep -qiE 'готово|завершено|завершена|итоговый статус:[[:space:]]*завершено|status:[[:space:]]*(completed|done)|task complete|all tasks (done|completed)|work is complete'; then
+        completion_claim=1
+    fi
+fi
+
+strict_stop=0
+if [ "${RALPH_STOP_STRICT:-0}" = "1" ] || [ "$completion_claim" -eq 1 ]; then
+    strict_stop=1
+fi
 
 # ----------------------------------------------------------------------
 # G_OPEN: open `[ ]` tasks in active-tracker.
 # ----------------------------------------------------------------------
 active_pointer="$repo/.claude/active-tracker"
+if [ ! -f "$active_pointer" ]; then
+    if [ "$strict_stop" -eq 1 ]; then
+        python3 "$validator" stop --project "$repo"
+    fi
+    echo "::notice::ralph-loop-05: no .claude/active-tracker; allowing Stop in non-strict mode." >&2
+    exit 0
+fi
+
 if [ -f "$active_pointer" ]; then
     tracker=$(<"$active_pointer")
     if [ -f "$tracker" ]; then
         open_tasks=$(grep -nE "^- \[ \]" "$tracker" 2>/dev/null || true)
         if [ -n "$open_tasks" ]; then
+            if [ "$strict_stop" -eq 1 ]; then
+                python3 "$validator" stop --project "$repo"
+            fi
             first=$(printf '%s' "$open_tasks" | head -1)
-            cat <<EOF >&2
-::error::ralph-loop-05: open tracker tasks remain. Cannot stop session.
-
-First open task:
-  $first
-
-Tracker: $tracker
-Total open: $(printf '%s' "$open_tasks" | wc -l | tr -d ' ')
-
-Resume work on the first open task. To intentionally end early, the
-operator must \`touch $override_marker\` and re-trigger Stop.
-EOF
-            exit 2
+            {
+                printf '::notice::ralph-loop-05: open tracker tasks remain; allowing Stop in non-strict mode to avoid session loop.\n'
+                printf 'First open task: %s\n' "$first"
+                printf 'Tracker: %s\n' "$tracker"
+                printf 'Total open: %s\n' "$(printf '%s' "$open_tasks" | wc -l | tr -d ' ')"
+                printf 'Hard block still applies for RALPH_STOP_STRICT=1 or explicit completion claims.\n'
+            } >&2
+            exit 0
         fi
     fi
 fi
+
+python3 "$validator" stop --project "$repo"
 
 # ----------------------------------------------------------------------
 # G15: HANDOFF.md freshness vs last code commit.

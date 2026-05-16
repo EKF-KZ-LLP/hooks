@@ -27,6 +27,12 @@ jobs:
             bash -n "$file"
           done < <(find global per-repo tests -name '*.sh' -type f | sort)
 
+      - name: Shared policy runner tests
+        run: |
+          node --check shared/agent-hooks/policy-runner.js
+          node --check shared/agent-hooks/policy-runner.test.js
+          node shared/agent-hooks/policy-runner.test.js
+
       - name: Whitespace check
         run: |
           if git rev-parse HEAD^ >/dev/null 2>&1; then
@@ -43,6 +49,9 @@ jobs:
 
       - name: Negative enforcement tests
         run: tests/negative-ralph-loop-enforcement.sh
+
+      - name: Stop gate tests
+        run: tests/stop-open-tasks-gate.sh
 
       - name: Optional guard tests
         run: tests/optional-guards-enforcement.sh
