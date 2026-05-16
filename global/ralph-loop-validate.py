@@ -197,6 +197,28 @@ def git_head_parents(project: Path) -> list[str]:
     return line.split()[1:] if line else []
 
 
+def git_changed_files(project: Path, base: str, head: str = "HEAD") -> list[str]:
+    output = run(["git", "diff", "--name-only", f"{base}..{head}"], cwd=project)
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def is_metadata_only_path(rel: str) -> bool:
+    return (
+        rel in {"WORKPLAN.md", "HANDOFF.md", "DECISIONS.md"}
+        or rel.startswith(".checkpoints/")
+        or rel.startswith(".agent-state/")
+        or rel == ".claude/active-tracker"
+        or rel.startswith(".claude/sprints/")
+        or rel.startswith("docs/superpowers/plans/")
+        or rel.startswith("docs/phase-0-data-quality/")
+    )
+
+
+def head_is_metadata_only(project: Path, parent: str) -> bool:
+    changed = git_changed_files(project, parent)
+    return bool(changed) and all(is_metadata_only_path(rel) for rel in changed)
+
+
 def head_matches_evidence(project: Path, head: str, evidence_commits: set[str]) -> bool:
     if not head:
         return True
@@ -206,7 +228,12 @@ def head_matches_evidence(project: Path, head: str, evidence_commits: set[str]) 
     # Merge commits create a self-reference problem for pre-push: adding the
     # merge SHA into evidence would change that same SHA. Accept evidence that
     # names the first parent, i.e. the verified branch tip before merging main.
-    return len(parents) > 1 and parents[0] in evidence_commits
+    if len(parents) > 1 and parents[0] in evidence_commits:
+        return True
+    # Non-merge commits have the same self-reference problem only for
+    # metadata-only evidence commits. Do not let a code commit inherit stale
+    # first-parent evidence.
+    return bool(parents) and parents[0] in evidence_commits and head_is_metadata_only(project, parents[0])
 
 
 def is_git_repo(project: Path) -> bool:

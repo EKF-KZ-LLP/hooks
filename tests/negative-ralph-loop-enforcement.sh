@@ -385,6 +385,93 @@ EOF
   expect_allow "merge HEAD accepts first-parent evidence" python3 "$VALIDATOR" stop --project "$repo"
 }
 
+test_metadata_head_accepts_first_parent_evidence() {
+  local repo first evidence
+  repo="$(make_repo)"
+  git -C "$repo" commit --allow-empty -q -m "verified code parent"
+  first="$(head_sha "$repo")"
+
+  evidence="$repo/.checkpoints/TASK-001/evidence.md"
+  cat > "$evidence" <<EOF
+Command: local verify
+Command: pytest tests/test_app.py && ruff check src/app.py
+Result: PASS pytest and ruff
+Commit: $first
+Senior Engineer PASS
+Review-scope: full-code-path
+Diff-only: false
+Claude Code plugin
+codex:rescue
+codex:codex-rescue
+AGENTS.md
+Verbatim output preserved
+EOF
+  cat > "$repo/WORKPLAN.md" <<EOF
+- [x] TASK-001: Metadata-parent evidence task
+  - type: code
+  - required: true
+  - scope: src/app.py
+  - source_of_truth: negative test
+  - success_criteria: metadata-only evidence commit accepts first-parent evidence
+  - verification: python3 ralph-loop-validate.py stop
+  - evidence: .checkpoints/TASK-001/evidence.md
+  - result: verified on first parent before metadata commit
+  - commit: $first
+  - status: done
+EOF
+  printf '# Handoff\n' > "$repo/HANDOFF.md"
+  printf '%s\n' "$repo/WORKPLAN.md" > "$repo/.claude/active-tracker"
+  git -C "$repo" add WORKPLAN.md HANDOFF.md .claude/active-tracker .checkpoints/TASK-001/evidence.md
+  git -C "$repo" commit -q -m "record evidence for verified parent"
+
+  expect_allow "metadata HEAD accepts first-parent evidence" python3 "$VALIDATOR" stop --project "$repo"
+}
+
+test_code_head_rejects_first_parent_evidence() {
+  local repo first evidence
+  repo="$(make_repo)"
+  git -C "$repo" commit --allow-empty -q -m "verified code parent"
+  first="$(head_sha "$repo")"
+
+  evidence="$repo/.checkpoints/TASK-001/evidence.md"
+  cat > "$evidence" <<EOF
+Command: local verify
+Command: pytest tests/test_app.py && ruff check src/app.py
+Result: PASS pytest and ruff
+Commit: $first
+Senior Engineer PASS
+Review-scope: full-code-path
+Diff-only: false
+Claude Code plugin
+codex:rescue
+codex:codex-rescue
+AGENTS.md
+Verbatim output preserved
+EOF
+  cat > "$repo/WORKPLAN.md" <<EOF
+- [x] TASK-001: Code-parent evidence task
+  - type: code
+  - required: true
+  - scope: src/app.py
+  - source_of_truth: negative test
+  - success_criteria: code commit cannot inherit stale first-parent evidence
+  - verification: python3 ralph-loop-validate.py stop
+  - evidence: .checkpoints/TASK-001/evidence.md
+  - result: verified on first parent before code change
+  - commit: $first
+  - status: done
+EOF
+  printf '# Handoff\n' > "$repo/HANDOFF.md"
+  printf '%s\n' "$repo/WORKPLAN.md" > "$repo/.claude/active-tracker"
+  git -C "$repo" add WORKPLAN.md HANDOFF.md .claude/active-tracker .checkpoints/TASK-001/evidence.md
+  git -C "$repo" commit -q -m "record evidence for verified parent"
+  printf 'print("changed after evidence")\n' > "$repo/src/app.py"
+  git -C "$repo" add src/app.py
+  git -C "$repo" commit -q -m "change code after evidence"
+
+  expect_block "code HEAD rejects first-parent evidence" python3 "$VALIDATOR" stop --project "$repo"
+}
+
 test_skip_reason_direct_bash() {
   local repo payload
   repo="$(make_repo)"
@@ -724,6 +811,8 @@ test_done_with_zero_required_tracker
 test_codex_not_rescue
 test_review_old_sha
 test_merge_head_accepts_first_parent_evidence
+test_metadata_head_accepts_first_parent_evidence
+test_code_head_rejects_first_parent_evidence
 test_skip_reason_direct_bash
 test_skip_reason_write_tool
 test_override_without_approval_ref_blocks

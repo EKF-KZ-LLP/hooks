@@ -483,6 +483,30 @@
   commit: pending
   timestamp: 2026-05-16T11:58:00+03:00
 
+- attempt: 40
+  task_id: TASK-020
+  trigger: test_failed
+  hypothesis: First-parent evidence must be accepted for metadata-only evidence commits, otherwise every post-verification evidence commit creates a new impossible HEAD SHA; but accepting it for code commits would weaken the gate.
+  action: Added two regressions: metadata-only HEAD accepts first-parent evidence, code HEAD rejects first-parent evidence. First run failed the metadata-only allow case as expected.
+  command_or_artifact: `bash tests/negative-ralph-loop-enforcement.sh`
+  result: RED as expected: `metadata HEAD accepts first-parent evidence` was blocked while `code HEAD rejects first-parent evidence` stayed blocked.
+  next_decision: patch `head_matches_evidence` to distinguish merge, metadata-only commit and code commit.
+  evidence: `tests/negative-ralph-loop-enforcement.sh`
+  commit: pending
+  timestamp: 2026-05-16T12:04:00+03:00
+
+- attempt: 41
+  task_id: TASK-020
+  trigger: test_passed
+  hypothesis: Evidence self-reference can be solved without opening a bypass if first-parent acceptance is limited to merge commits and metadata-only commits.
+  action: Added `git_changed_files`, metadata-only path classification and `head_is_metadata_only`; synced runtime validator; reran negative suite.
+  command_or_artifact: `global/ralph-loop-validate.py`; `/Users/antonsahovskii/.claude/hooks/ralph-loop-validate.py`; `bash tests/negative-ralph-loop-enforcement.sh`; `python3 -m py_compile ...`
+  result: PASS. Negative suite reports 41 passed. Merge HEAD and metadata-only HEAD accept verified first-parent evidence; code HEAD rejects first-parent evidence.
+  next_decision: rerun focused syntax/parity checks, amend Hooks PR branch, then create PSA metadata evidence commit referencing the code commit.
+  evidence: local command output in current Codex session
+  commit: pending
+  timestamp: 2026-05-16T12:08:00+03:00
+
 - attempt: 18
   task_id: TASK-014
   trigger: test_failed
