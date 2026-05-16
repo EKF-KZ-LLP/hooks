@@ -317,16 +317,15 @@ if [ "$is_glab_merge" -eq 1 ] && command -v glab >/dev/null 2>&1; then
 fi
 
 if [ "$local_pass" -ne 1 ] && [ "$server_pass" -ne 1 ] && [ "$project_pass" -ne 1 ]; then
-    cat >&2 <<EOF
-::error::ralph-loop-04: $provider PR/MR #$mr_num merge BLOCKED - no valid Codex review evidence.
-Acceptable evidence (any one):
-  - tracker line referencing pr-${mr_num}-merged with evidence:<path>.md containing Codex Verdict: PASS
-  - docs/superpowers/reviews/*-pr${mr_num}-*-codex.md with Codex Verdict: APPROVED
-  - .claude/evidence/PR-${mr_num}/codex-review.md or codex-roundN.md
-
-Evidence must include: Claude Code plugin, codex:rescue, codex:codex-rescue, AGENTS.md, verbatim, full-code-path, Command, Result and current Commit.
-Bypass: --ralph-override (with explicit user authorisation).
-EOF
+    {
+        printf '::error::ralph-loop-04: %s PR/MR #%s merge BLOCKED - no valid Codex review evidence.\n' "$provider" "$mr_num"
+        printf 'Acceptable evidence (any one):\n'
+        printf '  - tracker line referencing pr-%s-merged with evidence:<path>.md containing Codex Verdict: PASS\n' "$mr_num"
+        printf '  - docs/superpowers/reviews/*-pr%s-*-codex.md with Codex Verdict: APPROVED\n' "$mr_num"
+        printf '  - .claude/evidence/PR-%s/codex-review.md or codex-roundN.md\n\n' "$mr_num"
+        printf 'Evidence must include: Claude Code plugin, codex:rescue, codex:codex-rescue, AGENTS.md, verbatim, full-code-path, Command, Result and current Commit.\n'
+        printf 'Bypass: --ralph-override (with explicit user authorisation).\n'
+    } >&2
     exit 2
 fi
 
@@ -370,16 +369,18 @@ if [ "$is_gh_merge" -eq 1 ]; then
     head_sha=$(gh pr view "$mr_num" --json headRefOid --jq .headRefOid 2>/dev/null || true)
     if [ -n "$head_sha" ]; then
         missing_pr_head=""
-        while IFS= read -r f; do
+        old_ifs=$IFS
+        IFS='
+'
+        for f in $accepted_evidence_files; do
             [ -n "$f" ] || continue
             [ -f "$f" ] || continue
             if ! grep -q "$head_sha" "$f"; then
                 missing_pr_head="$missing_pr_head
   - $f missing PR head $head_sha"
             fi
-        done <<EOF
-$accepted_evidence_files
-EOF
+        done
+        IFS=$old_ifs
         if [ -n "$missing_pr_head" ]; then
             echo "::error::ralph-loop-04: PR #$mr_num review evidence does not match PR HEAD:" >&2
             printf '%b\n' "$missing_pr_head" >&2

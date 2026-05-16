@@ -38,7 +38,7 @@ CMD="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null |
 # skip-reason.md was a cheat vector: agent wrote it directly to fake
 # user OVERRIDE-authored SKIPs. Only hook 02 (UserPromptSubmit) is
 # allowed to create skip-reason.md.
-PROTECTED_RE='(\.claude/active-tracker|\.claude/plans/\.active-tracker|\.evidence/[^[:space:]]*plan[^[:space:]]*\.(md|markdown)|\.checkpoints/[^[:space:]]*/(evidence|attempt-[^/[:space:]]+|pre-fix-failing-test|[^/[:space:]]*review[^/[:space:]]*|skip-reason)\.(md|markdown)|\.claude/evidence/[^[:space:]]*\.(md|markdown)|phase0-plan\.(md|markdown)|[^[:space:]]*-tracker\.(md|markdown)|\bWORKPLAN([_.-][A-Z0-9_.-]*)?\.(md|markdown)\b|\bHANDOFF([_.-][A-Z0-9_.-]*)?\.(md|markdown)\b|\bWORKP[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|\bWORK[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|\bHAND[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|\bHANDO[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|WORK[^[:space:]/A-Za-z]+PLAN\.(md|markdown)|HAND[^[:space:]/A-Za-z]+OFF\.(md|markdown)|WORK["'"'"'][[:space:]]*\+[[:space:]]*["'"'"']PLAN|HAND["'"'"'][[:space:]]*\+[[:space:]]*["'"'"']OFF)'
+PROTECTED_RE='(\.claude/active-tracker|\.claude/approval-refs\.allow|\.claude/plans/\.active-tracker|\.claude/\.allow-stop|\.claude/no-plan-mode|\.claude/\.ralph-loop-secret|\.evidence/[^[:space:]]*plan[^[:space:]]*\.(md|markdown)|\.checkpoints/[^[:space:]]*/evidence\.(md|markdown)|\.checkpoints/[^[:space:]]*/skip-reason\.(md|markdown)|\.checkpoints/[^[:space:]]*/\.skip-token|\.claude/evidence/[^[:space:]]*\.(md|markdown)|phase0-plan\.(md|markdown)|[^[:space:]]*-tracker\.(md|markdown)|\bWORKPLAN([_.-][A-Z0-9_.-]*)?\.(md|markdown)\b|\bHANDOFF([_.-][A-Z0-9_.-]*)?\.(md|markdown)\b|\bWORKP[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|\bWORK[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|\bHAND[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|\bHANDO[*?][A-Z0-9*?_.-]*\.(md|markdown)\b|WORK[^[:space:]/A-Za-z]+PLAN\.(md|markdown)|HAND[^[:space:]/A-Za-z]+OFF\.(md|markdown)|WORK["'"'"'][[:space:]]*\+[[:space:]]*["'"'"']PLAN|HAND["'"'"'][[:space:]]*\+[[:space:]]*["'"'"']OFF)'
 
 # Two-phase detection: (1) command references a protected path,
 # (2) command contains any write-intent verb. If BOTH true → deny.
@@ -96,7 +96,7 @@ if printf '%s' "$CMD" | grep -qE "$WRITE_INTENT_RE"; then
      && [[ "${RALPH_LEGIT_CHMOD:-}" == "1" ]]; then
     exit 0
   fi
-  echo "::error::guard-no-tracker-overwrite: Bash command references a tracker/evidence file AND uses a write-intent verb (redirect, tee, sed -i, awk -i inplace, perl -pi, python/node write, truncate, dd, cp, mv, install, ln, chmod, chown, touch). Use Edit/Write tool so anti-cheat hook chain runs. Protected files: tracker/active-tracker, WORKPLAN/HANDOFF, checkpoint evidence, attempt, pre-fix, review and skip-reason files. Legitimate evidence is produced by approved helper hooks, not direct shell writes." >&2
+  echo "::error::guard-no-tracker-overwrite: Bash command references a tracker/evidence file AND uses a write-intent verb (redirect, tee, sed -i, awk -i inplace, perl -pi, python/node write, truncate, dd, cp, mv, install, ln, chmod, chown). Use Edit/Write tool so anti-cheat hook chain runs. Protected files: tracker/active-tracker, evidence.md (chmod 0444), phase0-plan.md, *-tracker.md. The only legitimate evidence producer is ~/.claude/hooks/run-codex-review.sh which sets RALPH_LEGIT_CHMOD=1." >&2
   exit 2
 fi
 

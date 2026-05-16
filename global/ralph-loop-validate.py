@@ -192,6 +192,109 @@ def git_head(project: Path) -> str:
     return run(["git", "rev-parse", "HEAD"], cwd=project)
 
 
+def git_head_parents(project: Path) -> list[str]:
+    line = run(["git", "rev-list", "--parents", "-n", "1", "HEAD"], cwd=project)
+    return line.split()[1:] if line else []
+
+
+def git_changed_files(project: Path, base: str, head: str = "HEAD") -> list[str]:
+    output = run(["git", "diff", "--name-only", f"{base}..{head}"], cwd=project)
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def git_is_ancestor(project: Path, commit: str, head: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, head],
+            cwd=str(project),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def git_commit_distance(project: Path, base: str, head: str) -> int | None:
+    value = run(["git", "rev-list", "--count", f"{base}..{head}"], cwd=project)
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def is_metadata_only_path(rel: str) -> bool:
+    return (
+        rel in {"WORKPLAN.md", "HANDOFF.md", "DECISIONS.md"}
+        or rel.startswith(".checkpoints/")
+        or rel.startswith(".agent-state/")
+        or rel == ".claude/active-tracker"
+        or rel.startswith(".claude/sprints/")
+        or rel.startswith("docs/superpowers/plans/")
+        or rel.startswith("docs/phase-0-data-quality/")
+    )
+
+
+def head_is_metadata_only(project: Path, parent: str) -> bool:
+    changed = git_changed_files(project, parent)
+    return bool(changed) and all(is_metadata_only_path(rel) for rel in changed)
+
+
+def nearest_evidence_ancestor(project: Path, head: str, evidence_commits: set[str]) -> str | None:
+    candidates: list[tuple[int, str]] = []
+    for commit in evidence_commits:
+        if not commit or not git_is_ancestor(project, commit, head):
+            continue
+        distance = git_commit_distance(project, commit, head)
+        if distance is not None:
+            candidates.append((distance, commit))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[0][1]
+
+
+def task_scope_unchanged_since(project: Path, task: Task, base: str, head: str) -> bool:
+    scope = clean_value(task.meta.get("scope", ""))
+    if not scope or not any(token in scope for token in ("/", ".")):
+        return False
+    changed = git_changed_files(project, base, head)
+    if not changed:
+        return True
+    for rel in changed:
+        if is_metadata_only_path(rel):
+            continue
+        path = project / rel
+        if rel in scope or path.name in scope:
+            return False
+    return True
+
+
+def head_matches_evidence(project: Path, head: str, evidence_commits: set[str], task: Task) -> bool:
+    if not head:
+        return True
+    if head in evidence_commits:
+        return True
+    parents = git_head_parents(project)
+    # Merge commits create a self-reference problem for pre-push: adding the
+    # merge SHA into evidence would change that same SHA. Accept evidence that
+    # names the first parent, i.e. the verified branch tip before merging main.
+    if len(parents) > 1 and parents[0] in evidence_commits:
+        return True
+    # Non-merge commits have the same self-reference problem only for
+    # metadata-only evidence commits. Do not let a code commit inherit stale
+    # first-parent evidence.
+    if bool(parents) and parents[0] in evidence_commits and head_is_metadata_only(project, parents[0]):
+        return True
+    # Closed task evidence should not be invalidated by later commits that
+    # touch files outside that task's declared scope. Same-scope changes still
+    # require fresh evidence and remain blocked by the review_old_sha test.
+    ancestor = nearest_evidence_ancestor(project, head, evidence_commits)
+    return bool(ancestor and task_scope_unchanged_since(project, task, ancestor, head))
+
+
 def is_git_repo(project: Path) -> bool:
     return (project / ".git").exists() and bool(git_head(project))
 
@@ -354,7 +457,7 @@ def validate_evidence(project: Path, task: Task, context: str = "task evidence")
     lowered = f"{task.text}\n{evidence_text}".lower()
     is_prefix_evidence = "pre-fix" in lowered or "pre-review" in lowered
     if head and not is_prefix_evidence:
-        if head not in file_commits:
+        if not head_matches_evidence(project, head, file_commits, task):
             found = ", ".join(sorted(file_commits)) or "none"
             raise GateError(f"{task.task_id}: evidence file SHA is stale or missing current HEAD {head}; found {found}")
 
@@ -364,7 +467,7 @@ def validate_evidence(project: Path, task: Task, context: str = "task evidence")
             raise GateError(f"{task.task_id}: review evidence is diff-only")
         if "full-code-path" not in lowered:
             raise GateError(f"{task.task_id}: review evidence must include full-code-path")
-        if head and head not in evidence_commits and not is_prefix_evidence:
+        if head and not head_matches_evidence(project, head, evidence_commits, task) and not is_prefix_evidence:
             raise GateError(f"{task.task_id}: review evidence must match current HEAD {head}")
 
     if "codex" in lowered:
@@ -680,6 +783,11 @@ def active_tracker_path(project: Path) -> Path | None:
 
 
 def find_active_task(project: Path) -> Task | None:
+    tasks = find_active_tasks(project)
+    return tasks[0] if tasks else None
+
+
+def find_active_tasks(project: Path) -> list[Task]:
     candidates = [project / "WORKPLAN.md"]
     tracker = active_tracker_path(project)
     if tracker:
@@ -688,10 +796,44 @@ def find_active_task(project: Path) -> Task | None:
         if not candidate.exists():
             continue
         tasks, _ = parse_tasks(read_text(candidate))
-        for task in tasks:
-            if task.status == "in_progress" or (task.required and not task.checked and task.status == "planned"):
-                return task
-    return None
+        active = [
+            task
+            for task in tasks
+            if task.status == "in_progress" or (task.required and not task.checked and task.status == "planned")
+        ]
+        if active:
+            return active
+    return []
+
+
+def task_scope_matches_path(task: Task, rel: str, path: Path) -> bool:
+    scope = clean_value(task.meta.get("scope", ""))
+    return bool(scope and (rel in scope or path.name in scope))
+
+
+def select_active_task_for_paths(project: Path, staged_paths: list[str]) -> Task | None:
+    tasks = [task for task in find_active_tasks(project) if task.task_id]
+    if not tasks:
+        return None
+    governed = [rel for rel in staged_paths if is_governed_path(project / rel)]
+    if not governed:
+        return None
+
+    matches: list[Task] = []
+    for task in tasks:
+        if all(task_scope_matches_path(task, rel, project / rel) for rel in governed):
+            matches.append(task)
+
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        ids = ", ".join(task.task_id or "UNKNOWN" for task in matches)
+        raise GateError(f"multiple active tasks match staged files: {ids}. Narrow task scope or stage one task at a time")
+    if len(tasks) > 1:
+        ids = ", ".join(task.task_id or "UNKNOWN" for task in tasks)
+        staged = ", ".join(governed)
+        raise GateError(f"staged files do not match any single active task scope: {staged}. Active tasks: {ids}")
+    return tasks[0]
 
 
 def validate_governed_edit(project: Path, file_path: Path) -> None:
@@ -794,6 +936,8 @@ def validate_stop(project: Path) -> None:
     tasks = validate_task_contract(project, text, closed_evidence=True)
     if not tasks:
         raise GateError("active plan has zero checkbox tasks")
+    if not any(task.required for task in tasks):
+        raise GateError("active plan has zero required tasks; active-tracker cannot point to a trivial/session-only tracker")
     for task in tasks:
         if task.required and not task.checked and task.status not in {"done", "waived"}:
             raise GateError(f"DONE blocked: required {task.task_id} is still open")
@@ -807,15 +951,15 @@ def validate_precommit(project: Path) -> None:
     if tracker and tracker.exists():
         validate_task_contract(project, read_text(tracker), closed_evidence=True)
     validate_workplan_handoff_fresh(project)
-    task = find_active_task(project)
     staged = run(["git", "diff", "--cached", "--name-only"], cwd=project)
-    if staged and task and task.task_id:
-        scope = clean_value(task.meta.get("scope", ""))
-        for rel in staged.splitlines():
+    staged_paths = [line for line in staged.splitlines() if line.strip()]
+    task = select_active_task_for_paths(project, staged_paths)
+    if staged_paths and task and task.task_id:
+        for rel in staged_paths:
             path = project / rel
             if not is_governed_path(path):
                 continue
-            if rel not in scope and path.name not in scope:
+            if not task_scope_matches_path(task, rel, path):
                 raise GateError(f"{task.task_id}: staged file '{rel}' is outside task scope")
 
 
